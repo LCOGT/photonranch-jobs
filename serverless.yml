@@ -1,0 +1,203 @@
+org: photonadmin # Corresponds to the serverless.com account used for monitoring
+app: photonranch
+
+service: photonranch-jobs
+
+package:
+  exclude:
+    - venv/**
+    - node_modules/**
+
+plugins:
+  - serverless-python-requirements
+  - serverless-dynamodb-pitr
+
+# Enable point-in-time-recovery
+custom:
+  pitr:
+    - tableName: ${self:provider.environment.DYNAMODB_JOBS}
+      enabled: true
+
+
+provider:
+  name: aws
+  runtime: python3.7
+  region: us-east-1
+  environment: 
+    DYNAMODB_JOBS: photonranch-jobs1
+    AUTH0_CLIENT_ID: ${file(./secrets.json):AUTH0_CLIENT_ID}
+    AUTH0_CLIENT_PUBLIC_KEY: ${file(./public_key)}
+  iamRoleStatements:
+    - Effect: Allow 
+      Action: 
+        - "dynamodb:PutItem"
+        - "dynamodb:GetItem"
+        - "dynamodb:UpdateItem"
+        - "dynamodb:DeleteItem"
+        - "dynamodb:Scan"
+        - "dynamodb:Query"
+      Resource:
+        - "arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.DYNAMODB_JOBS}*"
+
+resources: # CloudFormation template syntax from here on.
+  Resources:
+
+    # Configure API gateway "Gateway Responses" to work with CORS restrictions
+    GatewayResponseDefault4XX:
+      Type: 'AWS::ApiGateway::GatewayResponse'
+      Properties:
+        ResponseParameters:
+          gatewayresponse.header.Access-Control-Allow-Origin: "'*'"
+          gatewayresponse.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+          gatewayresponse.header.Access-Control-Allow-Methods: "'GET,POST,OPTIONS'"
+        ResponseType: DEFAULT_4XX
+        RestApiId:
+          Ref: 'ApiGatewayRestApi'
+    GatewayResponseDefault5XX:
+      Type: 'AWS::ApiGateway::GatewayResponse'
+      Properties:
+        ResponseParameters:
+          gatewayresponse.header.Access-Control-Allow-Origin: "'*'"
+          gatewayresponse.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+          gatewayresponse.header.Access-Control-Allow-Methods: "'GET,POST,OPTIONS'"
+        ResponseType: DEFAULT_4XX
+        RestApiId:
+          Ref: 'ApiGatewayRestApi'
+    GatewayResponse:
+      Type: 'AWS::ApiGateway::GatewayResponse'
+      Properties:
+        ResponseParameters:
+          gatewayresponse.header.Access-Control-Allow-Origin: "'*'"
+          gatewayresponse.header.Access-Control-Allow-Headers: "'*'"
+        ResponseType: EXPIRED_TOKEN
+        RestApiId:
+          Ref: 'ApiGatewayRestApi'
+        StatusCode: '401'
+    AuthFailureGatewayResponse:
+      Type: 'AWS::ApiGateway::GatewayResponse'
+      Properties:
+        ResponseParameters:
+          gatewayresponse.header.Access-Control-Allow-Origin: "'*'"
+          gatewayresponse.header.Access-Control-Allow-Headers: "'*'"
+        ResponseType: UNAUTHORIZED
+        RestApiId:
+          Ref: 'ApiGatewayRestApi'
+        StatusCode: '401'
+
+    # Define the dynamodb table we use to store calendar events
+    messagesTable: 
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:provider.environment.DYNAMODB_JOBS}
+        AttributeDefinitions:
+          - AttributeName: site 
+            AttributeType: S
+          - AttributeName: ulid 
+            AttributeType: S
+          - AttributeName: statusId
+            AttributeType: S
+        KeySchema:
+          - AttributeName: site 
+            KeyType: HASH
+          - AttributeName: ulid
+            KeyType: RANGE
+        GlobalSecondaryIndexes:
+          - IndexName: StatusId
+            KeySchema:
+              - AttributeName: site
+                KeyType: HASH
+              - AttributeName: statusId 
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+            ProvisionedThroughput:
+              ReadCapacityUnits: 1
+              WriteCapacityUnits: 1
+        ProvisionedThroughput:
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
+
+functions:
+  authorizerFunc: 
+    handler: authorizer.auth
+    cors: true
+  newJob:
+    handler: handler.newJob
+    events:
+      - http:
+          path: newjob
+          method: post
+          #authorizer:
+            #name: authorizerFunc
+            #resultTtlInSeconds: 0 # Don't cache the policy or other tasks will fail!
+          cors:
+            origin: '*'
+            headers:
+              - Content-Type
+              - X-Amz-Date
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Security-Token
+              - X-Amz-User-Agent
+              - Access-Control-Allow-Origin
+              - Access-Control-Allow-Credentials
+  updateJobStatus:
+    handler: handler.updateJobStatus
+    events:
+      - http:
+          path: updatejobstatus
+          method: post
+          #authorizer:
+            #name: authorizerFunc
+            #resultTtlInSeconds: 0 # Don't cache the policy or other tasks will fail!
+          cors:
+            origin: '*'
+            headers:
+              - Content-Type
+              - X-Amz-Date
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Security-Token
+              - X-Amz-User-Agent
+              - Access-Control-Allow-Origin
+              - Access-Control-Allow-Credentials
+  getUnreadJobs:
+    handler: handler.getUnreadJobs
+    events:
+      - http:
+          path: getnewjobs
+          method: post
+          #authorizer:
+            #name: authorizerFunc
+            #resultTtlInSeconds: 0 # Don't cache the policy or other tasks will fail!
+          cors:
+            origin: '*'
+            headers:
+              - Content-Type
+              - X-Amz-Date
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Security-Token
+              - X-Amz-User-Agent
+              - Access-Control-Allow-Origin
+              - Access-Control-Allow-Credentials
+  #reportJobStarted:
+  #  handler: handler.reportJobStarted
+  #  events:
+  #    - http:
+  #        path: reportjobstarted
+  #        method: post
+  #        #authorizer:
+  #          #name: authorizerFunc
+  #          #resultTtlInSeconds: 0 # Don't cache the policy or other tasks will fail!
+  #        cors:
+  #          origin: '*'
+  #          headers:
+  #            - Content-Type
+  #            - X-Amz-Date
+  #            - Authorization
+  #            - X-Api-Key
+  #            - X-Amz-Security-Token
+  #            - X-Amz-User-Agent
+  #            - Access-Control-Allow-Origin
+  #            - Access-Control-Allow-Credentials
