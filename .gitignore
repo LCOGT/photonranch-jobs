@@ -26,3 +26,4 @@ calendar-backend.public_key
 venv
 node_modules
 .vscode/
+__pycache__

@@ -11,12 +11,18 @@ package:
 plugins:
   - serverless-python-requirements
   - serverless-dynamodb-pitr
+  - serverless-domain-manager
 
 # Enable point-in-time-recovery
 custom:
   pitr:
     - tableName: ${self:provider.environment.DYNAMODB_JOBS}
       enabled: true
+  customDomain:
+    domainName: 'jobs.photonranch.org'
+    basePath: 'jobs' 
+    stage: ${self:provider.stage}
+    createRoute53Record: true
 
 
 provider:
@@ -127,9 +133,9 @@ functions:
       - http:
           path: newjob
           method: post
-          #authorizer:
-            #name: authorizerFunc
-            #resultTtlInSeconds: 0 # Don't cache the policy or other tasks will fail!
+          authorizer:
+            name: authorizerFunc
+            resultTtlInSeconds: 0 # Don't cache the policy or other tasks will fail!
           cors:
             origin: '*'
             headers:
@@ -181,23 +187,25 @@ functions:
               - X-Amz-User-Agent
               - Access-Control-Allow-Origin
               - Access-Control-Allow-Credentials
-  #reportJobStarted:
-  #  handler: handler.reportJobStarted
-  #  events:
-  #    - http:
-  #        path: reportjobstarted
-  #        method: post
-  #        #authorizer:
-  #          #name: authorizerFunc
-  #          #resultTtlInSeconds: 0 # Don't cache the policy or other tasks will fail!
-  #        cors:
-  #          origin: '*'
-  #          headers:
-  #            - Content-Type
-  #            - X-Amz-Date
-  #            - Authorization
-  #            - X-Api-Key
-  #            - X-Amz-Security-Token
-  #            - X-Amz-User-Agent
-  #            - Access-Control-Allow-Origin
-  #            - Access-Control-Allow-Credentials
+  startJob:
+    handler: handler.startJob
+    events:
+      - http:
+          path: startjob
+          method: post
+          #authorizer:
+            #name: authorizerFunc
+            #resultTtlInSeconds: 0 # Don't cache the policy or other tasks will fail!
+          cors:
+            origin: '*'
+            headers:
+              - Content-Type
+              - X-Amz-Date
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Security-Token
+              - X-Amz-User-Agent
+              - Access-Control-Allow-Origin
+              - Access-Control-Allow-Credentials
+
+

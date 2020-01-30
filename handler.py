@@ -1,78 +1,11 @@
-import json
-import os
-import boto3
-import decimal
-import sys
-import ulid
+import json, os, boto3, decimal, sys, ulid
 from boto3.dynamodb.conditions import Key, Attr
 from botocore.exceptions import ClientError
 
+from helpers import *
 
 dynamodb = boto3.resource('dynamodb')
 
-
-#=========================================#
-#=======     Helper Functions     ========#
-#=========================================#
-
-def create_200_response(message):
-    return { 
-        'statusCode': 200,
-        'headers': {
-            # Required for CORS support to work
-            'Access-Control-Allow-Origin': '*',
-            # Required for cookies, authorization headers with HTTPS
-            'Access-Control-Allow-Credentials': 'true',
-        },
-        'body': message
-    }
-
-def create_403_response(message):
-    return { 
-        'statusCode': 403,
-        'headers': {
-            # Required for CORS support to work
-            'Access-Control-Allow-Origin': '*',
-            # Required for cookies, authorization headers with HTTPS
-            'Access-Control-Allow-Credentials': 'true',
-        },
-        'body': message
-    }
-
-# Helper class to convert a DynamoDB item to JSON.
-class DecimalEncoder(json.JSONEncoder):
-    def default(self, o):
-        if isinstance(o, decimal.Decimal):
-            if o % 1 > 0:
-                return float(o)
-            else:
-                return int(o)
-        return super(DecimalEncoder, self).default(o)
-
-
-### Helper Function
-#def modifyItemKey(oldPk, oldSk, newPk, newSk):
-    #table = dynamodb.Table(os.environ['DYNAMODB_JOBS'])
-
-    #oldItemKey = {
-        #'site': oldPk,
-        #'sk': oldSk
-    #}
-    #oldItem = table.get_item(Key=oldItemKey)
-    #newItem = oldItem['Item']
-    #newItem['sk'] = newSk
-    #newItem['site'] = newPk
-    #put_response = table.put_item(Item=newItem)
-    #delete_response = table.delete_item(Key=oldItemKey)
-    #print('new item response: ',put_response)
-    #print('delete old version response: ',delete_response)
-def modifyItemKey(oldPk, oldSk, newItem):
-    table = dynamodb.Table(os.environ['DYNAMODB_JOBS'])
-    delete_response = table.delete_item(Key={'site': oldPk, 'ulid': oldSk})
-    put_response = table.put_item(Item=newItem)
-    print('new item response: ',put_response)
-    print('delete old version response: ',delete_response)
-        
 
 #=========================================#
 #=======       API Endpoints      ========#
@@ -181,58 +114,41 @@ def getUnreadJobs(event, context):
 
     return create_200_response(json.dumps(table_response['Items'], indent=4, cls=DecimalEncoder))
 
+def startJob(event, context):
+    ''' Example body:
+    { 
+        "site": "wmd, 
+        "ulid": "01DZVXKEV8YKCFJBM5HV0YA0WE", 
+        "secondsUntilComplete": "60"
+    }
+    '''
 
-##def reportJobStarted(event, context):
-#    #params = json.loads(event.get("body", ""))
-#    #table = dynamodb.Table(os.environ['DYNAMODB_JOBS'])
-#
-#    #site = params['site']
-#    #ulid_id = f"RECEIVED#{params['timestamp']}"
-#    #updatedItem = table.get_item(Key={'site':site,'ulid':ulid})['Item']
-#    #updatedItem['ulid'] = ulid.replace("RECEIVED","STARTED")
-#    #modifyItemKey(site, sk, updatedItem)
-#    #return create_200_response('job has been marked as STARTED')
-#
-#def reportJobSucceeded(event, context):
-#    params = json.loads(event.get("body", ""))
-#    table = dynamodb.Table(os.environ['DYNAMODB_JOBS'])
-#
-#    site = params['site']
-#    sk = f"STARTED#{params['timestamp']}"
-#    updatedItem = table.get_item(Key={'site':site,'sk':sk})['Item']
-#    updatedItem['sk'] = sk.replace("STARTED","SUCCEEDED")
-#    modifyItemKey(site, sk, updatedItem)
-#    return create_200_response('job has been marked as SUCCEEDED')
-#
-#def reportJobFAILED(event, context):
-#    params = json.loads(event.get("body", ""))
-#    table = dynamodb.Table(os.environ['DYNAMODB_JOBS'])
-#
-#    site = params['site']
-#    sk = f"STARTED#{params['timestamp']}"
-#    updatedItem = table.get_item(Key={'site':site,'sk':sk})['Item']
-#    updatedItem['sk'] = sk.replace("STARTED","FAILED")
-#    modifyItemKey(site, sk, updatedItem)
-#    return create_200_response('job has been marked as FAILED')
-#
-#def reportJobCancelled(event, context):
-#    params = json.loads(event.get("body", ""))
-#    table = dynamodb.Table(os.environ['DYNAMODB_JOBS'])
-#
-#    site = params['site']
-#    sk = f"STARTED#{params['timestamp']}"
-#    updatedItem = table.get_item(Key={'site':site,'sk':sk})['Item']
-#    updatedItem['sk'] = sk.replace("STARTED","CANCELLED")
-#    modifyItemKey(site, sk, updatedItem)
-#    return create_200_response('job has been marked as CANCELLED')
+    params = json.loads(event.get("body", ""))
+    table = dynamodb.Table(os.environ['DYNAMODB_JOBS'])
 
-#def reportJobStatus(event,context):
-    #params = json.loads(event.get("body", ""))
-    #table = dynamodb.Table(os.environ['DYNAMODB_JOBS'])
+    print('params:',params) # for debugging
 
-    #newStatus = params['status']
+    try:
+        site = params['site']
+        jobId = params['ulid']
+    except Exception as e:
+        return create_400_response("Requires 'site' and 'jobId' in the body payload.")
 
-    #site = params['site']
-    #sk = f"{}"
+    # Time estimate for task that is starting. Empty value gets default of -1.
+    secondsUntilComplete = params.get('secondsUntilComplete', -1)
+
+    response = table.update_item(
+        Key={
+            'site': site,
+            'ulid': jobId,
+        },
+        UpdateExpression="set statusId = :statId, secondsUntilComplete = :eta ",
+        ExpressionAttributeValues={
+            ':statId': f"STARTED#{jobId}",
+            ':eta': secondsUntilComplete
+        }
+    )
+
+    return create_200_response(json.dumps(response, indent=4, cls=DecimalEncoder))
 
 
