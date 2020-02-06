@@ -13,10 +13,11 @@ plugins:
   - serverless-dynamodb-pitr
   - serverless-domain-manager
 
-# Enable point-in-time-recovery
 custom:
-  pitr:
-    - tableName: ${self:provider.environment.DYNAMODB_JOBS}
+  jobsConnectionsTable: photonranch-jobs-connections1
+  jobsTable: photonranch-jobs1
+  pitr: # enable point-in-time recovery
+    - tableName: ${self:custom.jobsTable}
       enabled: true
   customDomain:
     domainName: 'jobs.photonranch.org'
@@ -27,12 +28,22 @@ custom:
 
 provider:
   name: aws
+  stage: dev
   runtime: python3.7
   region: us-east-1
+  websocketsApiName: websockets-photonranch-jobs
+  websocketsApiRouteSelectionExpression: $request.body.action
   environment: 
-    DYNAMODB_JOBS: photonranch-jobs1
+    DYNAMODB_JOBS: ${self:custom.jobsTable}
+    JOBS_CONNECTION_TABLE: ${self:custom.jobsConnectionsTable}
     AUTH0_CLIENT_ID: ${file(./secrets.json):AUTH0_CLIENT_ID}
     AUTH0_CLIENT_PUBLIC_KEY: ${file(./public_key)}
+    WSS_URL:
+      Fn::Join:
+        - ""
+        - - "https://"
+          - Ref: "WebsocketsApi"
+          - ".execute-api.${self:provider.region}.amazonaws.com/${self:provider.stage}"
   iamRoleStatements:
     - Effect: Allow 
       Action: 
@@ -42,8 +53,16 @@ provider:
         - "dynamodb:DeleteItem"
         - "dynamodb:Scan"
         - "dynamodb:Query"
+        - dynamodb:DescribeStream
+        - dynamodb:GetRecords
+        - dynamodb:GetShardIterator
+        - dynamodb:ListStreams
       Resource:
-        - "arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.DYNAMODB_JOBS}*"
+        # needs to work for connecitons table and jobs table. 
+        # can I include two resources here? Generic connection for now.
+        #- "arn:aws:dynamodb:${self:provider.region}:*:table/${self:custom.jobsTable}*"
+        #- "arn:aws:dynamodb:${self:provider.region}:*:table/${self:custom.jobsConnectionsTable}*"
+        - "arn:aws:dynamodb:${self:provider.region}:*:*"
 
 resources: # CloudFormation template syntax from here on.
   Resources:
@@ -94,7 +113,7 @@ resources: # CloudFormation template syntax from here on.
     messagesTable: 
       Type: AWS::DynamoDB::Table
       Properties:
-        TableName: ${self:provider.environment.DYNAMODB_JOBS}
+        TableName: ${self:custom.jobsTable}
         AttributeDefinitions:
           - AttributeName: site 
             AttributeType: S
@@ -119,6 +138,23 @@ resources: # CloudFormation template syntax from here on.
             ProvisionedThroughput:
               ReadCapacityUnits: 1
               WriteCapacityUnits: 1
+        ProvisionedThroughput:
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
+        StreamSpecification:
+          StreamViewType: NEW_AND_OLD_IMAGES
+
+    # Store the clients that are subscribed to job status updates
+    connectionsTable: 
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:custom.jobsConnectionsTable}
+        AttributeDefinitions:
+          - AttributeName: ConnectionID
+            AttributeType: S
+        KeySchema:
+          - AttributeName: ConnectionID
+            KeyType: HASH
         ProvisionedThroughput:
           ReadCapacityUnits: 1
           WriteCapacityUnits: 1
@@ -207,5 +243,25 @@ functions:
               - X-Amz-User-Agent
               - Access-Control-Allow-Origin
               - Access-Control-Allow-Credentials
+  
+  conectHandler:
+    handler: handler.connection_manager
+    events: 
+      - websocket: 
+          route: $connect
+      - websocket:
+          route: $disconnect
+
+  streamFunction:
+    handler: handler.streamHandler
+    events:
+      - stream: 
+          type: dynamodb
+          arn: 
+            Fn::GetAtt:
+              #- ${self:custom.jobsTable}
+              #- photonranch-jobs1
+              - messagesTable
+              - StreamArn
 
 
