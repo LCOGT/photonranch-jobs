@@ -203,11 +203,31 @@ functions:
               - X-Amz-User-Agent
               - Access-Control-Allow-Origin
               - Access-Control-Allow-Credentials
-  getUnreadJobs:
-    handler: handler.getUnreadJobs
+  getNewJobs:
+    handler: handler.getNewJobs
     events:
       - http:
           path: getnewjobs
+          method: post
+          #authorizer:
+            #name: authorizerFunc
+            #resultTtlInSeconds: 0 # Don't cache the policy or other tasks will fail!
+          cors:
+            origin: '*'
+            headers:
+              - Content-Type
+              - X-Amz-Date
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Security-Token
+              - X-Amz-User-Agent
+              - Access-Control-Allow-Origin
+              - Access-Control-Allow-Credentials
+  getRecentJobs:
+    handler: handler.getRecentJobs
+    events:
+      - http:
+          path: getrecentjobs
           method: post
           #authorizer:
             #name: authorizerFunc
