@@ -23,6 +23,7 @@ Jobs are stored as entries in a dynamodb table. They can be thought of as json o
     "image_type": "light",
     "time": "1"
   },
+  "secondsUntilComplete": "60",
   "site": "wmd",
   "statusId": "RECEIVED#01DZVY846T52P6P3JWAJNJMJ1Z",
   "timestamp_ms": 1580411916506,
@@ -35,9 +36,10 @@ The keys are described as follows:
 - **deviceType**: the generic type of device for the job
 - **optional_params**: command-specific optional information
 - **required_params**: command-specific required information
+- **secondsUntilComplete**: estimate of the seconds until the job status is marked "COMPLETE".
 - **site**: site abbreviation
 - **statusId**: string concatenation of `{jobStatus}#{ulid}`
-- **ulid**: unique lexicographical id. Sorting by this string will place jobs in the order they were issued. 
+- **ulid**: unique lexicographically-sortable id. Sorting by this string will place jobs in the order they were issued. For more info: https://github.com/ulid/spec
 
 ## Endpoints
 
@@ -64,9 +66,65 @@ All of the following endpoints use the base url `https://jobs.photonranch.org/jo
         - "site" | string | site abbreviation
         - "ulid" | string | id of the job being updated
         - "newStatus" | string | new status, for example: "STARTED", "EXPOSING", "COMPLETE".
-        - "secondsUntilComplete" | int | estimate of the remaining time until a future status update of "complete" is sent. An empty value will register as -1. If no time estimate is available, use value of -1. 
+        - "secondsUntilComplete" | int | estimate of the remaining time until a future status update of "complete" is sent. An empty value will register as -1. If no time estimate is available, use value of -1.
     - Response data: 200 if successful
-    
+    - Example request:
+    ```python
+    # python 3.6
+    import requests, json
+    url = "https://jobs.photonranch.org/jobs/updatejobstatus"
+    payload = json.dumps({
+        "site": "wmd",
+        "ulid": "01E4C33S9ZFGS8P0K31FH9FDTN",
+        "newStatus": "STARTED",
+        "secondsUntilComplete": 5
+    })
+    response = requests.request("POST", url, data=payload)
+    print(response.json())
+    ```
+
+    - Example response:
+
+    ```python
+    {
+        'ResponseMetadata': {
+            'RequestId': '5UJ90INAI48OD0TPC7LVHK85R3VV4KQNSO5AEMVJF66Q9ASUAAJG', 
+            'HTTPStatusCode': 200, 
+            'HTTPHeaders': {
+                'server': 'Server', 
+                'date': 'Thu, 
+                26 Mar 2020 21:41:37 GMT', 
+                'content-type': 'application/x-amz-json-1.0', 
+                'content-length': '2', 
+                'connection': 'keep-alive', 
+                'x-amzn-requestid': '5UJ90INAI48OD0TPC7LVHK85R3VV4KQNSO5AEMVJF66Q9ASUAAJG', 
+                'x-amz-crc32': '2745614147'
+            }, 
+            'RetryAttempts': 0
+        }
+    }
+    ```
+    - The job in dynamodb has been updated to look like:
+
+    ```json
+    [
+        {
+            "statusId": "STARTED#01E4C33S9ZFGS8P0K31FH9FDTN",
+            "action": "move_relative",
+            "deviceType": "focuser",
+            "required_params": {
+                "position": "1"
+            },
+            "ulid": "01E4C33S9ZFGS8P0K31FH9FDTN",
+            "timestamp_ms": 1585248855359,
+            "deviceInstance": "focuser1",
+            "secondsUntilComplete": 5,
+            "site": "wmd",
+            "optional_params": {}
+        }
+    ]
+    ```
+  
 - POST `/getnewjobs`
     - Description: get a list of jobs with status "UNREAD". These jobs are immediately updated with a status of "RECEIVED". 
     - Authorization required: no (will be added later)
@@ -74,6 +132,44 @@ All of the following endpoints use the base url `https://jobs.photonranch.org/jo
     - Request body: 
         - "site" | string | site abbreviation
     - Response data: List of job objects (json). See 'Job Syntax' above for an example.
+    - Example request: 
+    ```python
+    # python 3.6
+    import requests, json
+    url = "https://jobs.photonranch.org/jobs/getnewjobs"
+    payload = json.dumps({"site": "wmd"})
+    response = requests.request("POST", url, data=payload)
+    print(response.json())
+    ```
+    - Example response: 
+    ```json
+    [
+        {
+            "statusId": "UNREAD#01E4C33S9ZFGS8P0K31FH9FDTN",
+            "action": "move_relative",
+            "deviceType": "focuser",
+            "required_params": {
+                "position": "1"
+            },
+            "ulid": "01E4C33S9ZFGS8P0K31FH9FDTN",
+            "timestamp_ms": 1585248855359,
+            "deviceInstance": "focuser1",
+            "site": "wmd",
+            "optional_params": {}
+        },
+        {
+            "statusId": "UNREAD#01E4C34DEK5H1CMJEPJ2N5AX02",
+            "action": "stop",
+            "deviceType": "camera",
+            "required_params": {},
+            "ulid": "01E4C34DEK5H1CMJEPJ2N5AX02",
+            "timestamp_ms": 1585248875987,
+            "deviceInstance": "camera1",
+            "site": "wmd",
+            "optional_params": {}
+        }
+    ]
+    ```
 
 - POST `/getrecentjobs`
     - Description: return a list of jobs that are no older than the provided length of time.
@@ -83,3 +179,33 @@ All of the following endpoints use the base url `https://jobs.photonranch.org/jo
         - "site" | string | site abbreviation
         - "timeRange" | int | maximum age of jobs returned, *in milliseconds*
     - Response data: List of job objects (json). See 'Job Syntax' above for an example.
+    - Example request: 
+    ```python
+    # python 3.6
+    import requests, json
+    url = "https://jobs.photonranch.org/jobs/getrecentjobs"
+    payload = json.dumps({
+        "site": "wmd", 
+        "timeRange": 1000 * 60 * 60 * 24, # get anything less than a day old (using milliseconds)
+    })
+    response = requests.request("POST", url, data=payload)
+    print(response.json())
+    ```
+    - Example response: 
+    ```json
+    [
+        {
+            "statusId": "UNREAD#01E4C33S9ZFGS8P0K31FH9FDTN",
+            "action": "move_relative",
+            "deviceType": "focuser",
+            "required_params": {
+                "position": "1"
+            },
+            "ulid": "01E4C33S9ZFGS8P0K31FH9FDTN",
+            "timestamp_ms": 1585248855359,
+            "deviceInstance": "focuser1",
+            "site": "wmd",
+            "optional_params": {}
+        }
+    ]
+    ```
