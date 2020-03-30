@@ -219,7 +219,7 @@ def getNewJobs(event, context):
     params = json.loads(event.get("body", ""))
     table = dynamodb.Table(os.environ['DYNAMODB_JOBS'])
 
-    print('params:',params) # for debugging
+    print('params: ',params) # for debugging
 
     site = params['site']
 

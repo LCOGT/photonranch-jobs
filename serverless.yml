@@ -14,8 +14,8 @@ plugins:
   - serverless-domain-manager
 
 custom:
-  jobsConnectionsTable: photonranch-jobs-connections1
-  jobsTable: photonranch-jobs1
+  jobsConnectionsTable: photonranch-jobs-connections-${self:provider.stage}
+  jobsTable: photonranch-jobs-${self:provider.stage}
   pitr: # enable point-in-time recovery
     - tableName: ${self:custom.jobsTable}
       enabled: true
@@ -28,7 +28,7 @@ custom:
 
 provider:
   name: aws
-  stage: dev
+  stage: ${opt:stage, "dev"}
   runtime: python3.7
   region: us-east-1
   websocketsApiName: websockets-photonranch-jobs
@@ -169,9 +169,9 @@ functions:
       - http:
           path: newjob
           method: post
-          authorizer:
-            name: authorizerFunc
-            resultTtlInSeconds: 0 # Don't cache the policy or other tasks will fail!
+          #authorizer:
+          #  name: authorizerFunc
+          #  resultTtlInSeconds: 0 # Don't cache the policy or other tasks will fail!
           cors:
             origin: '*'
             headers:
