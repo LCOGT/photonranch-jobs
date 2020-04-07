@@ -60,11 +60,16 @@ def _send_to_connection(connection_id, data, wss_url):
     #data['deviceType']="filter"
     dataToSend = json.dumps(data, cls=DecimalEncoder).encode('utf-8')
     print(f"dataToSend:")
-    print(json.dumps(json.loads(dataToSend), indent=2))
-    return gatewayapi.post_to_connection(
-        ConnectionId=connection_id,
-        Data=dataToSend
-    )
+    print(json.loads(dataToSend))
+    try:
+        posted = gatewayapi.post_to_connection(
+            ConnectionId=connection_id,
+            Data=dataToSend
+        )
+        return posted
+    except Exception as e:
+        print(f"Could not send to connection {connection_id}")
+        print(e)
 
 def _send_to_all_connections(data):
 
@@ -79,9 +84,7 @@ def _send_to_all_connections(data):
     logger.debug("Broadcasting message: {}".format(data))
     #dataToSend = {"messages": [data]}
     for connectionID in connections:
-        connectionResponse = _send_to_connection(connectionID, data, os.getenv('WSS_URL'))
-        #print('connection response: ')
-        #print(json.dumps(connectionResponse))
+        _send_to_connection(connectionID, data, os.getenv('WSS_URL'))
 
 
 def streamHandler(event, context):
@@ -89,8 +92,8 @@ def streamHandler(event, context):
     print(json.dumps(event))
     #data = event['Records'][0]['dynamodb']['NewImage']
     records = event.get('Records', [])
-    for item in records:
 
+    for item in records:
         pk = item['dynamodb']['Keys']['site']['S']
         sk = item['dynamodb']['Keys']['ulid']['S']
     
