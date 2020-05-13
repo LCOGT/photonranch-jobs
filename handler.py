@@ -3,6 +3,7 @@ from boto3.dynamodb.conditions import Key, Attr
 from botocore.exceptions import ClientError
 
 from helpers import *
+from authorizer import userScheduledNow
 
 """
 TODO:
@@ -145,7 +146,7 @@ def newJob(event, context):
     timestamp_ms = ulid_obj.timestamp().int
 
     # Check that all required keys are present.
-    required_keys = ['site', 'device', 'instance', 'action', 'optional_params', 'required_params']
+    required_keys = ['site', 'device', 'instance', 'action', 'user_name', 'user_id', 'optional_params', 'required_params']
     actual_keys = params.keys()
     for key in required_keys:
         if key not in actual_keys:
@@ -159,10 +160,20 @@ def newJob(event, context):
                 },
             }
 
+    print("params:",params) # for debugging
+    print(f"user scheduled now site: {params['site']}")
+    print(f"user scheduled now user_id: {params['user_id']}")
+    print(f"user scheduled now result: {userScheduledNow(params['user_id'], params['site'])}")
+    if userScheduledNow(params['user_id'], params['site']):
+        print("Disabling commands because user has an event scheduled.")
+        return create_401_response("You have a calendar event scheduled now, which disables commands.")
+
     dynamodb_entry = {
         "site": f"{params['site']}",        # PK, GSI1 pk
         "ulid": job_id,                     # SK
         "statusId": f"UNREAD#{job_id}",     # GSI1 sk
+        "user_name": params['user_name'],
+        "user_id": params['user_id'],
         "timestamp_ms": timestamp_ms,
         "deviceType": f"{params['device']}",
         "deviceInstance": f"{params['instance']}",

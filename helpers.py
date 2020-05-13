@@ -32,6 +32,18 @@ def create_400_response(message):
         'body': message
     }
 
+def create_401_response(message):
+    return { 
+        'statusCode': 401,
+        'headers': {
+            # Required for CORS support to work
+            'Access-Control-Allow-Origin': '*',
+            # Required for cookies, authorization headers with HTTPS
+            'Access-Control-Allow-Credentials': 'true',
+        },
+        'body': message
+    }
+
 # Helper class to convert a DynamoDB item to JSON.
 class DecimalEncoder(json.JSONEncoder):
     def default(self, o):

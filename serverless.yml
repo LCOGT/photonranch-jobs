@@ -14,16 +14,24 @@ plugins:
   - serverless-domain-manager
 
 custom:
+
+  # This is the 'variable' for the customDomain.basePath value, based on the stage.
+  # Run as `sls deploy --stage <stage_name>`
+  stage:
+    dev: jobs
+    test: test 
+
+  customDomain:
+    domainName: 'jobs.photonranch.org'
+    basePath: ${self:custom.stage.${self:provider.stage}}
+    stage: ${self:provider.stage}
+    createRoute53Record: true
+
   jobsConnectionsTable: photonranch-jobs-connections-${self:provider.stage}
   jobsTable: photonranch-jobs-${self:provider.stage}
   pitr: # enable point-in-time recovery
     - tableName: ${self:custom.jobsTable}
       enabled: true
-  customDomain:
-    domainName: 'jobs.photonranch.org'
-    basePath: 'jobs' 
-    stage: ${self:provider.stage}
-    createRoute53Record: true
 
 
 provider:
@@ -169,9 +177,9 @@ functions:
       - http:
           path: newjob
           method: post
-          #authorizer:
-          #  name: authorizerFunc
-          #  resultTtlInSeconds: 0 # Don't cache the policy or other tasks will fail!
+          authorizer:
+            name: authorizerFunc
+            resultTtlInSeconds: 0 # Don't cache the policy or other tasks will fail!
           cors:
             origin: '*'
             headers:
