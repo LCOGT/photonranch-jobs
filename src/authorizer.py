@@ -5,9 +5,10 @@ import requests
 import datetime
 
 import jwt
-
 from cryptography.hazmat.backends import default_backend
 from cryptography.x509 import load_pem_x509_certificate
+
+from src.helpers import get_current_reservations
 
 # Set by serverless.yml
 AUTH0_CLIENT_ID = os.getenv('AUTH0_CLIENT_ID')
@@ -16,6 +17,7 @@ AUTH0_CLIENT_PUBLIC_KEY = os.getenv('AUTH0_CLIENT_PUBLIC_KEY')
 
 def userScheduledNow(user_id, site):
     '''
+    NOTE: not in use. Replaced by calendar_blocks_user_commands.
     Check if a user is currently scheduled for the given site by referencing the
     site calendar.
     Args:
@@ -24,7 +26,7 @@ def userScheduledNow(user_id, site):
     Returns:
         Boolean
     '''
-    url = "https://m1vw4uqnpd.execute-api.us-east-1.amazonaws.com/dev/is-user-scheduled"
+    url = "https://calendar.photonranch.org/dev/is-user-scheduled"
     body = json.dumps({
         "site": site,
         "user_id": user_id,
@@ -33,6 +35,39 @@ def userScheduledNow(user_id, site):
     response = requests.post(url, body).json()
     return response
 
+
+def calendar_blocks_user_commands(user_id, site):
+    """ Checks whether user commands should be blocked due to a reservation. 
+
+    If there are no reservations at the current time on the calendar, any 
+    user can send commands. If one or more reservations exist, the user must
+    be the creator of one of them in order to send commands. 
+
+    Args:
+        user_id: the 'sub' associated with the Auth0 user
+        site: sitecode (eg. 'wmd')
+    Returns:
+        Bool: False if the user has a reservation OR there are no reservations.
+    """
+
+    # Get all reservations happening now at the given site.
+    active_reservations = get_current_reservations(site)
+
+    # By default, users should be able to issue commands (if no reservations
+    # exist).
+    conflict_exists = False
+
+    # If there are any reservations, we'll have to make sure the user is 
+    # authorized. First assume they are not. 
+    if len(active_reservations) != 0:
+        conflict_exists = True
+
+    # Then, check if any reservations were created by the user. 
+    for event in active_reservations:  # usually just one event in the list
+        if event["creator_id"] == user_id:
+            conflict_exists = False
+
+    return conflict_exists
 
 
 def auth(event, context):

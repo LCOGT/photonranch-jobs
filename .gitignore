@@ -27,3 +27,7 @@ venv
 node_modules
 .vscode/
 __pycache__
+
+# scratch directory
+scratch/
+
