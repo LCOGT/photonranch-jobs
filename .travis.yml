@@ -7,6 +7,6 @@ python:
 install:
   - pip install -r requirements.txt coverage coveralls pytest-cov
 script:
-  - pytest --cov=src tests
+  - pytest --cov=src src/tests
 
 after_success: coveralls
