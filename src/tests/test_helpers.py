@@ -1,6 +1,6 @@
 import pytest
 
-from photonranch_jobs.src.helpers import get_response, get_current_reservations
+from src.helpers import get_response, get_current_reservations
 
 def test_get_response():
     message = "test result"

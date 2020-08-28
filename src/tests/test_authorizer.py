@@ -1,6 +1,6 @@
 import pytest
 
-from photonranch_jobs.src.authorizer import calendar_blocks_user_commands
+from src.authorizer import calendar_blocks_user_commands
 
 
 def test_calendar_blocks_user_commands_1(mocker):
@@ -31,7 +31,7 @@ def test_calendar_blocks_user_commands_1(mocker):
     # Mock the api call in calendar_blocks_user_commands to return the above
     # example reservations instead. 
     mocker.patch(
-        'photonranch_jobs.src.authorizer.get_current_reservations',
+        'src.authorizer.get_current_reservations',
         return_value=example_reservations
     )
 
@@ -65,7 +65,7 @@ def test_calendar_blocks_user_commands_2(mocker):
     # Mock the api call in calendar_blocks_user_commands to return the above
     # example reservations instead. 
     mocker.patch(
-        'photonranch_jobs.src.authorizer.get_current_reservations',
+        'src.authorizer.get_current_reservations',
         return_value=example_reservations
     )
 

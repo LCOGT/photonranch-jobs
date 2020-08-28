@@ -8,7 +8,7 @@ import jwt
 from cryptography.hazmat.backends import default_backend
 from cryptography.x509 import load_pem_x509_certificate
 
-from photonranch_jobs.src.helpers import get_current_reservations
+from src.helpers import get_current_reservations
 
 # Set by serverless.yml
 AUTH0_CLIENT_ID = os.getenv('AUTH0_CLIENT_ID')

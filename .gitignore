@@ -30,5 +30,5 @@ __pycache__
 .pytest_cache
 
 # scratch directory
-scratch/
+src/scratch/
 
