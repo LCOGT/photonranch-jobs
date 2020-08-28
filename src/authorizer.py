@@ -8,7 +8,7 @@ import jwt
 from cryptography.hazmat.backends import default_backend
 from cryptography.x509 import load_pem_x509_certificate
 
-from src.helpers import get_current_reservations
+from photonranch_jobs.src.helpers import get_current_reservations
 
 # Set by serverless.yml
 AUTH0_CLIENT_ID = os.getenv('AUTH0_CLIENT_ID')
@@ -18,6 +18,7 @@ AUTH0_CLIENT_PUBLIC_KEY = os.getenv('AUTH0_CLIENT_PUBLIC_KEY')
 def userScheduledNow(user_id, site):
     '''
     NOTE: not in use. Replaced by calendar_blocks_user_commands.
+
     Check if a user is currently scheduled for the given site by referencing the
     site calendar.
     Args:
