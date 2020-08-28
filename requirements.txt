@@ -11,6 +11,7 @@ docutils==0.15.2
 idna==2.8
 iniconfig==1.0.1
 jmespath==0.9.4
+jwt==1.0.0
 more-itertools==8.4.0
 packaging==20.4
 pluggy==0.13.1
