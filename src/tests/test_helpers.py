@@ -21,5 +21,3 @@ def test_current_reservations():
     except Exception as e:
         print(e)
         assert False
-
-

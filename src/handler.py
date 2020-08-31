@@ -2,8 +2,8 @@ import json, os, boto3, decimal, sys, ulid, logging, time
 from boto3.dynamodb.conditions import Key, Attr
 from botocore.exceptions import ClientError
 
-from helpers import *
-from authorizer import calendar_blocks_user_commands
+from src.helpers import *
+from src.authorizer import calendar_blocks_user_commands
 
 """
 TODO:
