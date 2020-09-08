@@ -28,7 +28,7 @@ def get_response(status_code, body):
 class DecimalEncoder(json.JSONEncoder):
     def default(self, o):
         if isinstance(o, decimal.Decimal):
-            if o % 1 > 0:
+            if o % 1 != 0:
                 return float(o)
             else:
                 return int(o)
