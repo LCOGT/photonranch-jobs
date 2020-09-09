@@ -1,6 +1,7 @@
 import json, os, boto3, decimal, sys, ulid, logging, time
 from boto3.dynamodb.conditions import Key, Attr
 from botocore.exceptions import ClientError
+from http import HTTPStatus
 
 from src.helpers import *
 from src.authorizer import calendar_blocks_user_commands
@@ -37,7 +38,7 @@ def connection_manager(event, context):
         # Add connectionID to the database
         table = dynamodb.Table(jobsConnectionTable)
         table.put_item(Item={"ConnectionID": connectionID})
-        return get_response(200, "Connect successful.")
+        return get_response(HTTPStatus.OK, "Connect successful.")
 
     elif event["requestContext"]["eventType"] in ("DISCONNECT", "CLOSE"):
         logger.info("Disconnect requested")
@@ -45,11 +46,11 @@ def connection_manager(event, context):
         # Remove the connectionID from the database
         table = dynamodb.Table(jobsConnectionTable)
         table.delete_item(Key={"ConnectionID": connectionID}) 
-        return get_response(200, "Disconnect successful.")
+        return get_response(HTTPStatus.OK, "Disconnect successful.")
 
     else:
         logger.error("Connection manager received unrecognized eventType '{}'")
-        return get_response(500, "Unrecognized eventType.")
+        return get_response(HTTPStatus.INTERNAL_SERVER_ERROR, "Unrecognized eventType.")
 
 def _send_to_connection(connection_id, data, wss_url):
     gatewayapi = boto3.client("apigatewaymanagementapi", endpoint_url=wss_url)
@@ -68,7 +69,6 @@ def _send_to_connection(connection_id, data, wss_url):
         print(e)
 
 def _send_to_all_connections(data):
-
     # Get all current connections
     jobsConnectionTable = os.getenv('JOBS_CONNECTION_TABLE')
     table = dynamodb.Table(jobsConnectionTable)
@@ -81,7 +81,6 @@ def _send_to_all_connections(data):
     #dataToSend = {"messages": [data]}
     for connectionID in connections:
         _send_to_connection(connectionID, data, os.getenv('WSS_URL'))
-
 
 def streamHandler(event, context):
     table = dynamodb.Table(os.environ['DYNAMODB_JOBS'])
@@ -112,7 +111,7 @@ def streamHandler(event, context):
         #_send_to_all_connections(data)
         _send_to_all_connections(response.get('Item', []))
 
-    return get_response(200, "stream has activated this function")
+    return get_response(HTTPStatus.OK, "stream has activated this function")
 
 #=========================================#
 #=======       API Endpoints      ========#
@@ -143,6 +142,7 @@ def newJob(event, context):
     timestamp_ms = ulid_obj.timestamp().int
 
     # Check that all required keys are present.
+    # TODO: validation with something like cerberus
     required_keys = ['site', 'device', 'instance', 'action', 'user_name', 
                      'user_id', 'optional_params', 'required_params']
     actual_keys = params.keys()
@@ -150,7 +150,7 @@ def newJob(event, context):
         if key not in actual_keys:
             print(f"Error: missing requied key {key}")
             error = f"Error: missing required key {key}"
-            return get_response(400, error)
+            return get_response(HTTPStatus.BAD_REQUEST, error)
 
     # Stop commands that are requested during someone else's reservation.
     user_id = params['user_id']
@@ -159,7 +159,7 @@ def newJob(event, context):
         print("Disabling commands because another user has a reservation now.")
         error = ("Someone else has a reservation right now. "
                  "Please see the calendar for details.")
-        return get_response(401, error)
+        return get_response(HTTPStatus.UNAUTHORIZED, error)
 
     # Build the jobs description and send it to dynamodb
     dynamodb_entry = {
@@ -182,7 +182,7 @@ def newJob(event, context):
         **dynamodb_entry,
         "table_response": table_response,
     }
-    return get_response(200, json.dumps(return_obj, indent=4, cls=DecimalEncoder))
+    return get_response(HTTPStatus.OK, json.dumps(return_obj, indent=4, cls=DecimalEncoder))
 
 def updateJobStatus(event, context):
     ''' Example request body: 
@@ -215,7 +215,7 @@ def updateJobStatus(event, context):
         }
     )
     print('update status response: ',response)
-    return get_response(200, json.dumps(response, indent=4, cls=DecimalEncoder))
+    return get_response(HTTPStatus.OK, json.dumps(response, indent=4, cls=DecimalEncoder))
 
 def getNewJobs(event, context):
     ''' Example request body: 
@@ -250,7 +250,7 @@ def getNewJobs(event, context):
             }
         )
 
-    return get_response(200, json.dumps(table_response['Items'], indent=4, cls=DecimalEncoder))
+    return get_response(HTTPStatus.OK, json.dumps(table_response['Items'], indent=4, cls=DecimalEncoder))
 
 def getRecentJobs(event, context):
     ''' Example body:
@@ -274,7 +274,7 @@ def getRecentJobs(event, context):
         KeyConditionExpression=Key('site').eq(site)
             & Key('ulid').gte(earliestUlid.str)
     )
-    return get_response(200, json.dumps(table_response['Items'], indent=4, cls=DecimalEncoder))
+    return get_response(HTTPStatus.OK, json.dumps(table_response['Items'], indent=4, cls=DecimalEncoder))
 
 def startJob(event, context):
     ''' Example body:
@@ -294,7 +294,7 @@ def startJob(event, context):
         site = params['site']
         jobId = params['ulid']
     except Exception as e:
-        return get_response(200, "Requires 'site' and 'jobId' in the body payload.")
+        return get_response(HTTPStatus.BAD_REQUEST, "Requires 'site' and 'jobId' in the body payload.")
 
     # Time estimate for task that is starting. Empty value gets default of -1.
     secondsUntilComplete = params.get('secondsUntilComplete', -1)
@@ -311,4 +311,4 @@ def startJob(event, context):
         }
     )
 
-    return get_response(200, json.dumps(response, indent=4, cls=DecimalEncoder))
+    return get_response(HTTPStatus.OK, json.dumps(response, indent=4, cls=DecimalEncoder))

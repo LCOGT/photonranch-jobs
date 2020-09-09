@@ -32,3 +32,5 @@ __pycache__
 # scratch directory
 src/scratch/
 
+# vscode
+*.code-workspace

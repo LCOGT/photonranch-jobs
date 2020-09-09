@@ -1,10 +1,11 @@
 import pytest
+from http import HTTPStatus
 
 from src.helpers import get_response, get_current_reservations
 
 def test_get_response():
     message = "test result"
-    code = 200
+    code = HTTPStatus.OK  # 200
     response = get_response(code, message)
     print(response)
     assert response['body'] == message
