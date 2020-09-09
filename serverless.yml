@@ -169,10 +169,10 @@ resources: # CloudFormation template syntax from here on.
 
 functions:
   authorizerFunc: 
-    handler: authorizer.auth
+    handler: src/authorizer.auth
     cors: true
   newJob:
-    handler: handler.newJob
+    handler: src/handler.newJob
     events:
       - http:
           path: newjob
@@ -192,7 +192,7 @@ functions:
               - Access-Control-Allow-Origin
               - Access-Control-Allow-Credentials
   updateJobStatus:
-    handler: handler.updateJobStatus
+    handler: src/handler.updateJobStatus
     events:
       - http:
           path: updatejobstatus
@@ -212,7 +212,7 @@ functions:
               - Access-Control-Allow-Origin
               - Access-Control-Allow-Credentials
   getNewJobs:
-    handler: handler.getNewJobs
+    handler: src/handler.getNewJobs
     events:
       - http:
           path: getnewjobs
@@ -232,7 +232,7 @@ functions:
               - Access-Control-Allow-Origin
               - Access-Control-Allow-Credentials
   getRecentJobs:
-    handler: handler.getRecentJobs
+    handler: src/handler.getRecentJobs
     events:
       - http:
           path: getrecentjobs
@@ -252,7 +252,7 @@ functions:
               - Access-Control-Allow-Origin
               - Access-Control-Allow-Credentials
   startJob:
-    handler: handler.startJob
+    handler: src/handler.startJob
     events:
       - http:
           path: startjob
@@ -273,7 +273,7 @@ functions:
               - Access-Control-Allow-Credentials
   
   conectHandler:
-    handler: handler.connection_manager
+    handler: src/handler.connection_manager
     events: 
       - websocket: 
           route: $connect
@@ -281,7 +281,7 @@ functions:
           route: $disconnect
 
   streamFunction:
-    handler: handler.streamHandler
+    handler: src/handler.streamHandler
     events:
       - stream: 
           type: dynamodb
@@ -291,5 +291,3 @@ functions:
               #- photonranch-jobs1
               - messagesTable
               - StreamArn
-
-

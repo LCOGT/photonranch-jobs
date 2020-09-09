@@ -1,9 +1,10 @@
 import json, os, boto3, decimal, sys, ulid, logging, time
 from boto3.dynamodb.conditions import Key, Attr
 from botocore.exceptions import ClientError
+from http import HTTPStatus
 
-from helpers import *
-from authorizer import userScheduledNow
+from src.helpers import *
+from src.authorizer import calendar_blocks_user_commands
 
 """
 TODO:
@@ -24,11 +25,6 @@ logger = logging.getLogger("handler_logger")
 logger.setLevel(logging.DEBUG)
 dynamodb = boto3.resource('dynamodb')
 
-def _get_response(status_code, body):
-    if not isinstance(body, str):
-        body = json.dumps(body)
-    return {"statusCode": status_code, "body": body}
-
 def connection_manager(event, context):
     """
     Handles connecting and disconnecting for the Websocket
@@ -42,7 +38,7 @@ def connection_manager(event, context):
         # Add connectionID to the database
         table = dynamodb.Table(jobsConnectionTable)
         table.put_item(Item={"ConnectionID": connectionID})
-        return _get_response(200, "Connect successful.")
+        return get_response(HTTPStatus.OK, "Connect successful.")
 
     elif event["requestContext"]["eventType"] in ("DISCONNECT", "CLOSE"):
         logger.info("Disconnect requested")
@@ -50,11 +46,11 @@ def connection_manager(event, context):
         # Remove the connectionID from the database
         table = dynamodb.Table(jobsConnectionTable)
         table.delete_item(Key={"ConnectionID": connectionID}) 
-        return _get_response(200, "Disconnect successful.")
+        return get_response(HTTPStatus.OK, "Disconnect successful.")
 
     else:
         logger.error("Connection manager received unrecognized eventType '{}'")
-        return _get_response(500, "Unrecognized eventType.")
+        return get_response(HTTPStatus.INTERNAL_SERVER_ERROR, "Unrecognized eventType.")
 
 def _send_to_connection(connection_id, data, wss_url):
     gatewayapi = boto3.client("apigatewaymanagementapi", endpoint_url=wss_url)
@@ -73,7 +69,6 @@ def _send_to_connection(connection_id, data, wss_url):
         print(e)
 
 def _send_to_all_connections(data):
-
     # Get all current connections
     jobsConnectionTable = os.getenv('JOBS_CONNECTION_TABLE')
     table = dynamodb.Table(jobsConnectionTable)
@@ -86,7 +81,6 @@ def _send_to_all_connections(data):
     #dataToSend = {"messages": [data]}
     for connectionID in connections:
         _send_to_connection(connectionID, data, os.getenv('WSS_URL'))
-
 
 def streamHandler(event, context):
     table = dynamodb.Table(os.environ['DYNAMODB_JOBS'])
@@ -117,7 +111,7 @@ def streamHandler(event, context):
         #_send_to_all_connections(data)
         _send_to_all_connections(response.get('Item', []))
 
-    return _get_response(200, "stream has activated this function")
+    return get_response(HTTPStatus.OK, "stream has activated this function")
 
 #=========================================#
 #=======       API Endpoints      ========#
@@ -131,7 +125,9 @@ def newJob(event, context):
         "instance":"camera1",
         "action":"stop",
         "required_params":{},
-        "optional_params":{}
+        "optional_params":{},
+        "user_name": "Tim Beccue",
+        "user_id": google-oauth2|1231230923412910"
     }
     '''
     params = json.loads(event.get("body", ""))
@@ -146,28 +142,26 @@ def newJob(event, context):
     timestamp_ms = ulid_obj.timestamp().int
 
     # Check that all required keys are present.
-    required_keys = ['site', 'device', 'instance', 'action', 'user_name', 'user_id', 'optional_params', 'required_params']
+    # TODO: validation with something like cerberus
+    required_keys = ['site', 'device', 'instance', 'action', 'user_name', 
+                     'user_id', 'optional_params', 'required_params']
     actual_keys = params.keys()
     for key in required_keys:
         if key not in actual_keys:
             print(f"Error: missing requied key {key}")
-            return {
-                "statusCode": 400,
-                "body": f"Error: missing required key {key}",
-                "headers": {
-                    "Access-Control-Allow-Origin": "*",
-                    "Access-Control-Allow-Credentials": "true",
-                },
-            }
+            error = f"Error: missing required key {key}"
+            return get_response(HTTPStatus.BAD_REQUEST, error)
 
-    print("params:",params) # for debugging
-    print(f"user scheduled now site: {params['site']}")
-    print(f"user scheduled now user_id: {params['user_id']}")
-    print(f"user scheduled now result: {userScheduledNow(params['user_id'], params['site'])}")
-    if userScheduledNow(params['user_id'], params['site']):
-        print("Disabling commands because user has an event scheduled.")
-        return create_401_response("You have a calendar event scheduled now, which disables commands.")
+    # Stop commands that are requested during someone else's reservation.
+    user_id = params['user_id']
+    site = params['site']
+    if calendar_blocks_user_commands(user_id, site):
+        print("Disabling commands because another user has a reservation now.")
+        error = ("Someone else has a reservation right now. "
+                 "Please see the calendar for details.")
+        return get_response(HTTPStatus.UNAUTHORIZED, error)
 
+    # Build the jobs description and send it to dynamodb
     dynamodb_entry = {
         "site": f"{params['site']}",        # PK, GSI1 pk
         "ulid": job_id,                     # SK
@@ -181,7 +175,6 @@ def newJob(event, context):
         "optional_params": params['optional_params'],
         "required_params": params['required_params'],
     }
-
     table_response = table.put_item(Item=dynamodb_entry)
 
     # return the dynamodb entry and the response from the table entry. 
@@ -189,7 +182,7 @@ def newJob(event, context):
         **dynamodb_entry,
         "table_response": table_response,
     }
-    return create_200_response(json.dumps(return_obj, indent=4, cls=DecimalEncoder))
+    return get_response(HTTPStatus.OK, json.dumps(return_obj, indent=4, cls=DecimalEncoder))
 
 def updateJobStatus(event, context):
     ''' Example request body: 
@@ -222,7 +215,7 @@ def updateJobStatus(event, context):
         }
     )
     print('update status response: ',response)
-    return create_200_response(json.dumps(response, indent=4, cls=DecimalEncoder))
+    return get_response(HTTPStatus.OK, json.dumps(response, indent=4, cls=DecimalEncoder))
 
 def getNewJobs(event, context):
     ''' Example request body: 
@@ -257,7 +250,7 @@ def getNewJobs(event, context):
             }
         )
 
-    return create_200_response(json.dumps(table_response['Items'], indent=4, cls=DecimalEncoder))
+    return get_response(HTTPStatus.OK, json.dumps(table_response['Items'], indent=4, cls=DecimalEncoder))
 
 def getRecentJobs(event, context):
     ''' Example body:
@@ -281,7 +274,7 @@ def getRecentJobs(event, context):
         KeyConditionExpression=Key('site').eq(site)
             & Key('ulid').gte(earliestUlid.str)
     )
-    return create_200_response(json.dumps(table_response['Items'], indent=4, cls=DecimalEncoder))
+    return get_response(HTTPStatus.OK, json.dumps(table_response['Items'], indent=4, cls=DecimalEncoder))
 
 def startJob(event, context):
     ''' Example body:
@@ -301,7 +294,7 @@ def startJob(event, context):
         site = params['site']
         jobId = params['ulid']
     except Exception as e:
-        return create_400_response("Requires 'site' and 'jobId' in the body payload.")
+        return get_response(HTTPStatus.BAD_REQUEST, "Requires 'site' and 'jobId' in the body payload.")
 
     # Time estimate for task that is starting. Empty value gets default of -1.
     secondsUntilComplete = params.get('secondsUntilComplete', -1)
@@ -318,128 +311,4 @@ def startJob(event, context):
         }
     )
 
-    return create_200_response(json.dumps(response, indent=4, cls=DecimalEncoder))
-
-
-if __name__=="__main__":
-    os.environ['DYNAMODB_JOBS'] = 'photonranch-jobs1'
-    os.environ['JOBS_CONNECTION_TABLE'] = 'photonranch-jobs-connections1'
-    os.environ['WSS_URL'] = 'https://1tlv47sxw4.execute-api.us-east-1.amazonaws.com/dev'
-
-    streamHandlerEvent = {
-        "Records": [
-            {
-                "eventID": "8fa90daf0b22a7cb2d6f0b41b6b15c8a",
-                "eventName": "INSERT",
-                "eventVersion": "1.1",
-                "eventSource": "aws:dynamodb",
-                "awsRegion": "us-east-1",
-                "dynamodb": {
-                    "ApproximateCreationDateTime": 1581091425,
-                    "Keys": {
-                        "site": {
-                            "S": "wmd"
-                        },
-                        "ulid": {
-                            "S": "01E0GEY4GZNYRP3JYGSAXZ13CY"
-                        }
-                    },
-                    "NewImage": {
-                        "deviceInstance": {
-                            "S": "camera1"
-                        },
-                        "deviceType": {
-                            "S": "camera"
-                        },
-                        "optional_params": {
-                            "M": {}
-                        },
-                        "site": {
-                            "S": "wmd"
-                        },
-                        "statusId": {
-                            "S": "UNREAD#01E0GEY4GZNYRP3JYGSAXZ13CY"
-                        },
-                        "ulid": {
-                            "S": "01E0GEY4GZNYRP3JYGSAXZ13CY"
-                        },
-                        "required_params": {
-                            "M": {}
-                        },
-                        "action": {
-                            "S": "stop"
-                        },
-                        "timestamp_ms": {
-                            "N": "1581091424628"
-                        }
-                    },
-                    "SequenceNumber": "34094600000000017645425689",
-                    "SizeBytes": 218,
-                    "StreamViewType": "NEW_AND_OLD_IMAGES"
-                },
-                "eventSourceARN": "arn:aws:dynamodb:us-east-1:306389350997:table/photonranch-jobs1/stream/2020-02-06T18:04:45.173"
-            }
-        ]
-    }
-
-    event2 = {
-    "Records": [
-        {
-            "eventID": "3a7c9a00d2eaa77d48365d1f9f540df8",
-            "eventName": "REMOVE",
-            "eventVersion": "1.1",
-            "eventSource": "aws:dynamodb",
-            "awsRegion": "us-east-1",
-            "dynamodb": {
-                "ApproximateCreationDateTime": 1581100464,
-                "Keys": {
-                    "site": {
-                        "S": "wmd"
-                    },
-                    "ulid": {
-                        "S": "01DZVXKEV8YKCFJBM5HV0YA0WE"
-                    }
-                },
-                "OldImage": {
-                    "deviceInstance": {
-                        "S": "camera1"
-                    },
-                    "deviceType": {
-                        "S": "camera"
-                    },
-                    "optional_params": {
-                        "M": {}
-                    },
-                    "site": {
-                        "S": "wmd"
-                    },
-                    "statusId": {
-                        "S": "RECEIVED#01DZVXKEV8YKCFJBM5HV0YA0WE"
-                    },
-                    "ulid": {
-                        "S": "01DZVXKEV8YKCFJBM5HV0YA0WE"
-                    },
-                    "required_params": {
-                        "M": {}
-                    },
-                    "action": {
-                        "S": "stop"
-                    },
-                    "timestamp_ms": {
-                        "N": "1580411239272"
-                    }
-                },
-                "SequenceNumber": "34828400000000015096291766",
-                "SizeBytes": 220,
-                "StreamViewType": "NEW_AND_OLD_IMAGES"
-            },
-            "eventSourceARN": "arn:aws:dynamodb:us-east-1:306389350997:table/photonranch-jobs1/stream/2020-02-06T18:04:45.173"
-        }
-    ]
-}
-    aJob = {"site": "wmd", "device":"camera","instance":"camera1","action":"stop","required_params":{},"optional_params":{}}
-
-
-    #streamHandler(streamHandlerEvent, {})
-    #streamHandler(event2, {})
-    new
+    return get_response(HTTPStatus.OK, json.dumps(response, indent=4, cls=DecimalEncoder))

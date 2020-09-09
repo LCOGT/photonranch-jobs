@@ -27,3 +27,10 @@ venv
 node_modules
 .vscode/
 __pycache__
+.pytest_cache
+
+# scratch directory
+src/scratch/
+
+# vscode
+*.code-workspace
