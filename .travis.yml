@@ -1,0 +1,12 @@
+language: python
+python:
+- '3.8'
+#branches:
+  #only:
+    #- master
+install:
+  - pip install -r requirements.txt coverage coveralls pytest-cov
+script:
+  - pytest --cov=src src/tests
+
+after_success: coveralls
