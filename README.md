@@ -42,6 +42,8 @@ The keys are described as follows:
 - **site**: site abbreviation
 - **statusId**: string concatenation of `{jobStatus}#{ulid}`
 - **ulid**: unique lexicographically-sortable id. Sorting by this string will place jobs in the order they were issued. For more info: https://github.com/ulid/spec
+- **user_name**: the username that is typically displayed to the user.
+- **user_id**: unique identification for the user. Stored as 'sub' in auth0.
 
 ## Endpoints
 
@@ -58,6 +60,8 @@ All of the following endpoints use the base url `https://jobs.photonranch.org/jo
         - "action" | string | name of the job
         - "required_params" | json | additional parameters for the job
         - "optional_params" | json | additional parameters for the job
+        - "user_name" | string | the readable username, used for display
+        - "user_id" | string | unique id for the user
     - Response data: returns a copy of the job that was added to the jobs database. 
 
 - POST `/updatejobstatus`
@@ -122,7 +126,9 @@ All of the following endpoints use the base url `https://jobs.photonranch.org/jo
             "deviceInstance": "focuser1",
             "secondsUntilComplete": 5,
             "site": "wmd",
-            "optional_params": {}
+            "optional_params": {},
+            "user_name": "Firstname Lastname",
+            "user_id": "user-id-1234"
         }
     ]
     ```
@@ -157,7 +163,9 @@ All of the following endpoints use the base url `https://jobs.photonranch.org/jo
             "timestamp_ms": 1585248855359,
             "deviceInstance": "focuser1",
             "site": "wmd",
-            "optional_params": {}
+            "optional_params": {},
+            "user_name": "Firstname Lastname",
+            "user_id": "user-id-1234"
         },
         {
             "statusId": "UNREAD#01E4C34DEK5H1CMJEPJ2N5AX02",
@@ -168,7 +176,9 @@ All of the following endpoints use the base url `https://jobs.photonranch.org/jo
             "timestamp_ms": 1585248875987,
             "deviceInstance": "camera1",
             "site": "wmd",
-            "optional_params": {}
+            "optional_params": {},
+            "user_name": "Firstname Lastname",
+            "user_id": "user-id-1234"
         }
     ]
     ```
@@ -207,7 +217,9 @@ All of the following endpoints use the base url `https://jobs.photonranch.org/jo
             "timestamp_ms": 1585248855359,
             "deviceInstance": "focuser1",
             "site": "wmd",
-            "optional_params": {}
+            "optional_params": {},
+            "user_name": "Firstname Lastname",
+            "user_id": "user-id-1234"
         }
     ]
     ```
