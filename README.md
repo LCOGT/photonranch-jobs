@@ -27,7 +27,9 @@ Jobs are stored as entries in a dynamodb table. They can be thought of as json o
   "site": "wmd",
   "statusId": "RECEIVED#01DZVY846T52P6P3JWAJNJMJ1Z",
   "timestamp_ms": 1580411916506,
-  "ulid": "01DZVY846T52P6P3JWAJNJMJ1Z"
+  "ulid": "01DZVY846T52P6P3JWAJNJMJ1Z",
+  "user_name": "my-username",
+  "user_id": "convoluted-user-id12349876"
 }
 ```
 The keys are described as follows: 

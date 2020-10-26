@@ -130,6 +130,8 @@ def newJob(event, context):
         "device":"camera",
         "instance":"camera1",
         "action":"stop",
+        "user_name": "some-username",
+        "user_id": "userid--123124235029350",
         "required_params":{},
         "optional_params":{}
     }
