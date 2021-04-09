@@ -129,7 +129,8 @@ def newJob(event, context):
         "required_params":{},
         "optional_params":{},
         "user_name": "Tim Beccue",
-        "user_id": google-oauth2|1231230923412910"
+        "user_id": google-oauth2|1231230923412910",
+        "user_roles": ['admin']
     }
     '''
     params = json.loads(event.get("body", ""))
@@ -170,6 +171,7 @@ def newJob(event, context):
         "statusId": f"UNREAD#{job_id}",     # GSI1 sk
         "user_name": params['user_name'],
         "user_id": params['user_id'],
+        "user_roles": params['user_roles'] if 'user_roles' in params else [],
         "timestamp_ms": timestamp_ms,
         "deviceType": f"{params['device']}",
         "deviceInstance": f"{params['instance']}",

@@ -21,6 +21,12 @@ custom:
     dev: jobs
     test: test 
 
+  # Since lambda runs on a linux instance, we need to zip the requirements in a linux docker container.
+  pythonRequirements:
+    dockerizePip: true
+    useDownloadCache: false 
+    useStaticCache: false
+
   customDomain:
     domainName: 'jobs.photonranch.org'
     basePath: ${self:custom.stage.${self:provider.stage}}
