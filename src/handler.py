@@ -25,62 +25,6 @@ logger = logging.getLogger("handler_logger")
 logger.setLevel(logging.DEBUG)
 dynamodb = boto3.resource('dynamodb')
 
-def connection_manager(event, context):
-    """
-    Handles connecting and disconnecting for the Websocket
-    """
-    jobsConnectionTable = os.getenv('JOBS_CONNECTION_TABLE')
-    connectionID = event["requestContext"].get("connectionId")
-
-    if event["requestContext"]["eventType"] == "CONNECT":
-        logger.info("Connect requested")
-
-        # Add connectionID to the database
-        table = dynamodb.Table(jobsConnectionTable)
-        table.put_item(Item={"ConnectionID": connectionID})
-        return get_response(HTTPStatus.OK, "Connect successful.")
-
-    elif event["requestContext"]["eventType"] in ("DISCONNECT", "CLOSE"):
-        logger.info("Disconnect requested")
-        
-        # Remove the connectionID from the database
-        table = dynamodb.Table(jobsConnectionTable)
-        table.delete_item(Key={"ConnectionID": connectionID}) 
-        return get_response(HTTPStatus.OK, "Disconnect successful.")
-
-    else:
-        logger.error("Connection manager received unrecognized eventType '{}'")
-        return get_response(HTTPStatus.INTERNAL_SERVER_ERROR, "Unrecognized eventType.")
-
-def _send_to_connection(connection_id, data, wss_url):
-    gatewayapi = boto3.client("apigatewaymanagementapi", endpoint_url=wss_url)
-    #data['deviceType']="filter"
-    dataToSend = json.dumps(data, cls=DecimalEncoder).encode('utf-8')
-    print(f"dataToSend:")
-    print(json.loads(dataToSend))
-    try:
-        posted = gatewayapi.post_to_connection(
-            ConnectionId=connection_id,
-            Data=dataToSend
-        )
-        return posted
-    except Exception as e:
-        print(f"Could not send to connection {connection_id}")
-        print(e)
-
-def _send_to_all_connections(data):
-    # Get all current connections
-    jobsConnectionTable = os.getenv('JOBS_CONNECTION_TABLE')
-    table = dynamodb.Table(jobsConnectionTable)
-    response = table.scan(ProjectionExpression="ConnectionID")
-    items = response.get("Items", [])
-    connections = [x["ConnectionID"] for x in items if "ConnectionID" in x]
-
-    # Send the message data to all connections
-    logger.debug("Broadcasting message: {}".format(data))
-    #dataToSend = {"messages": [data]}
-    for connectionID in connections:
-        _send_to_connection(connectionID, data, os.getenv('WSS_URL'))
 
 def streamHandler(event, context):
     table = dynamodb.Table(os.environ['DYNAMODB_JOBS'])
@@ -89,14 +33,12 @@ def streamHandler(event, context):
     records = event.get('Records', [])
 
     for item in records:
-        pk = item['dynamodb']['Keys']['site']['S']
+        site = item['dynamodb']['Keys']['site']['S']
         sk = item['dynamodb']['Keys']['ulid']['S']
     
-        print(pk)
-        print(sk)
         response = table.get_item(
             Key={
-                "site": pk,
+                "site": site,
                 "ulid": sk
             }
         )
@@ -109,7 +51,8 @@ def streamHandler(event, context):
 
         print(json.dumps(response, indent=2, cls=DecimalEncoder))
         #_send_to_all_connections(data)
-        _send_to_all_connections(response.get('Item', []))
+        #_send_to_all_connections(response.get('Item', []))
+        send_to_datastream(site, response.get('Item', []))
 
     return get_response(HTTPStatus.OK, "stream has activated this function")
 
