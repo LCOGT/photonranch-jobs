@@ -1,6 +1,57 @@
-# photonranch-jobs
+# Photon Ranch Jobs
 
 This repository manages job requests between the web UI and the observatory site software.
+
+## Description
+
+(insert description here)
+
+## Architecture
+
+An architecture diagram, when created, will go here.
+
+## Dependencies
+
+Dependencies will be listed here.
+
+## Local Development
+
+Clone the repository to your local machine:
+
+```
+git clone https://github.com/LCOGT/photonranch-jobs.git
+cd photonranch-jobs
+```
+
+### Requirements
+
+You will need the [Serverless Framework](https://www.serverless.com/framework/docs/getting-started) 
+installed locally for development. For manual deployment to AWS as well as for updating dependencies, 
+you will need to install [Node](https://nodejs.org/en/), 
+[npm](https://docs.npmjs.com/downloading-and-installing-node-js-and-npm), 
+and [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html), 
+configuring with your own AWS credentials.
+
+### Deployment
+
+This project currently has two stages, `dev` (currently treated as the production stage) and `test`. 
+For manual deployment on your local machine, you'll need to fill out the 
+`public_key` and `secrets.json` with the required information, and install packages:
+
+```
+npm install
+serverless plugin install --name serverless-python-requirements
+```
+
+To deploy, run:
+
+```
+serverless deploy --stage {stage}
+```
+
+### Testing
+
+Instructions to manually run tests will be detailed here.
 
 ## Job Syntax
 
@@ -62,7 +113,10 @@ All of the following endpoints use the base url `https://jobs.photonranch.org/jo
         - "optional_params" | json | additional parameters for the job
         - "user_name" | string | the readable username, used for display
         - "user_id" | string | unique id for the user
-    - Response data: returns a copy of the job that was added to the jobs database. 
+    - Responses: 
+        - 200: returns a copy of the job that was added to the jobs database
+        - 400: missing required key in body
+        - 401: unauthorized user (either not logged in or did not reserve time) 
 
 - POST `/updatejobstatus`
     - Description: Update the status of a job. This status is typically displayed in the UI for the user to see what is currently happening. 
@@ -73,7 +127,7 @@ All of the following endpoints use the base url `https://jobs.photonranch.org/jo
         - "ulid" | string | id of the job being updated
         - "newStatus" | string | new status, for example: "STARTED", "EXPOSING", "COMPLETE".
         - "secondsUntilComplete" | int | estimate of the remaining time until a future status update of "complete" is sent. An empty value will register as -1. If no time estimate is available, use value of -1.
-    - Response data: 200 if successful
+    - Responses: 200 if successful
     - Example request:
     ```python
     # python 3.6
@@ -139,7 +193,7 @@ All of the following endpoints use the base url `https://jobs.photonranch.org/jo
     - Query Params: none
     - Request body: 
         - "site" | string | site abbreviation
-    - Response data: List of job objects (json). See 'Job Syntax' above for an example.
+    - Responses: List of job objects (json). See 'Job Syntax' above for an example.
     - Example request: 
     ```python
     # python 3.6
@@ -190,7 +244,7 @@ All of the following endpoints use the base url `https://jobs.photonranch.org/jo
     - Request body: 
         - "site" | string | site abbreviation
         - "timeRange" | int | maximum age of jobs returned, *in milliseconds*
-    - Response data: List of job objects (json). See 'Job Syntax' above for an example.
+    - Responses: List of job objects (json). See 'Job Syntax' above for an example.
     - Example request: 
     ```python
     # python 3.6
@@ -223,3 +277,12 @@ All of the following endpoints use the base url `https://jobs.photonranch.org/jo
         }
     ]
     ```
+
+    - POST `/startjob`
+    - Description: 
+    - Authorization required: No
+    - Path Params:
+    - Query Params:
+    - Request body: 
+    - Responses: 
+    - Example request: 

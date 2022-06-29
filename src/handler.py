@@ -61,21 +61,35 @@ def streamHandler(event, context):
 #=========================================#
 
 def newJob(event, context):
-    ''' Example request body:
-    {
-        "site": "wmd", 
-        "device":"camera",
-        "instance":"camera1",
-        "action":"stop",
-        "user_name": "some-username",
-        "user_id": "userid--123124235029350",
-        "required_params":{},
-        "optional_params":{},
-        "user_name": "Tim Beccue",
-        "user_id": google-oauth2|1231230923412910",
-        "user_roles": ['admin']
-    }
+    ''' Requests a new job for an observatory to complete, typically from the UI,
+    and adds the job to dynamoDB table for the observatory to complete.
+
+    Args: JSON request body including
+        "site" (str): sitecode of job (e.g. "wmd"),
+        "user_name" (str): user requesting job (e.g. "Tim Beccue"),
+        "user_id" (str): auth0 id of user (e.g. "google-oauth2|112301903840371673242"),
+        "user_roles" (list): list of user's auth0 roles (e.g. ['admin']),
+        "device" (str): device type (e.g. "camera"),
+        "instance" (str): specific device (e.g. "camera1"),
+        "action" (str): action to be completed (e.g. "stop"),
+        "optional_params" (dict): optional parameters for the instrument (e.g. {bin: 1, count: 3, filter: 'R'}),
+        "required_params" (dict): required parameters for the instrument (e.g. {time: 60, image_type: 'light'}),
+    
+    Returns: JSON body of table entry including 
+        "site" (str): same as above,
+        "ulid" (str): unique ID of job based on the timestamp (e.g. "01G..."), 
+        "statusId" (str): ulid prefaced by the status of the job (e.g. "UNREAD#01G..."), 
+        "user_name" (str): same as above,
+        "user_id" (str): same as above,       
+        "user_roles" (list): same as above, if 'user_roles' in params, else [],
+        "timestamp_ms" (int): timestamp of job in ms,
+        "deviceType" (str): same as "device" above,
+        "deviceInstance" (str): same as "instance" above,
+        "action" (str): same as above,
+        "optional_params" (dict): same as above,
+        "required_params" (dict): same as above,
     '''
+
     params = json.loads(event.get("body", ""))
     table = dynamodb.Table(os.environ['DYNAMODB_JOBS'])
 
@@ -94,7 +108,7 @@ def newJob(event, context):
     actual_keys = params.keys()
     for key in required_keys:
         if key not in actual_keys:
-            print(f"Error: missing requied key {key}")
+            print(f"Error: missing required key {key}")
             error = f"Error: missing required key {key}"
             return get_response(HTTPStatus.BAD_REQUEST, error)
 

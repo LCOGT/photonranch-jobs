@@ -17,6 +17,8 @@ AUTH0_CLIENT_PUBLIC_KEY = os.getenv('AUTH0_CLIENT_PUBLIC_KEY')
 
 def userScheduledNow(user_id, site):
     '''
+    (Can this be deleted then??)
+    
     NOTE: not in use. Replaced by calendar_blocks_user_commands.
 
     Check if a user is currently scheduled for the given site by referencing the
