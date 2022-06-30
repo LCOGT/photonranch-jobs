@@ -4,7 +4,11 @@ This repository manages job requests between the web UI and the observatory site
 
 ## Description
 
-(insert description here)
+Users can create new job requests, such as pointing a mount or exposing a camera, 
+which observatories can then carry out.
+
+Observatories can retrieve new jobs to perform, update a job's status as it changes, and retrieve recent jobs regardless of status. Use of these API endpoints is mostly found in 
+[the observatory repository](https://github.com/LCOGT/ptr-observatory).
 
 ## Architecture
 
