@@ -15,40 +15,16 @@ AUTH0_CLIENT_ID = os.getenv('AUTH0_CLIENT_ID')
 AUTH0_CLIENT_PUBLIC_KEY = os.getenv('AUTH0_CLIENT_PUBLIC_KEY')
 
 
-def userScheduledNow(user_id, site):
-    '''
-    (Can this be deleted then??)
-    
-    NOTE: not in use. Replaced by calendar_blocks_user_commands.
-
-    Check if a user is currently scheduled for the given site by referencing the
-    site calendar.
-    Args:
-        user_id: the 'sub' associated with the Auth0 user
-        site: sitecode (eg. 'wmd')
-    Returns:
-        Boolean
-    '''
-    url = "https://calendar.photonranch.org/dev/is-user-scheduled"
-    body = json.dumps({
-        "site": site,
-        "user_id": user_id,
-        "time": datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S.%f')[:-7] + 'Z'
-    })
-    response = requests.post(url, body).json()
-    return response
-
-
 def calendar_blocks_user_commands(user_id, site):
-    """ Checks whether user commands should be blocked due to a reservation. 
+    """Checks whether user commands should be blocked due to a reservation.
 
     If there are no reservations at the current time on the calendar, any 
     user can send commands. If one or more reservations exist, the user must
     be the creator of one of them in order to send commands. 
 
     Args:
-        user_id: the 'sub' associated with the Auth0 user
-        site: sitecode (eg. 'wmd')
+        user_id: The 'sub' associated with the Auth0 user.
+        site: Sitecode (eg. 'saf').
     Returns:
         Bool: False if the user has a reservation OR there are no reservations.
     """
@@ -74,11 +50,12 @@ def calendar_blocks_user_commands(user_id, site):
 
 
 def auth(event, context):
-    '''
-    Return an authorization policy for the user based on their identity role.
+    """Returns authorization policy for the user based on their identity role.
+
     This does not include checks for specific time or resource permissions,
     such as scheduled time or site ownership.
-    '''
+    """
+
     print(f"auth event: {event}")
     whole_auth_token = event.get('authorizationToken')
     if not whole_auth_token:
@@ -118,6 +95,7 @@ def getUserInfo(auth_token):
     user_info = json.loads(response.content)
     return user_info
 
+
 def getUserRoles(userInfo):
     userRoles = userInfo['https://photonranch.org/user_metadata']['roles']
     return userRoles
@@ -150,11 +128,13 @@ def generate_policy(principal_id, effect, resource, userRoles):
         }
     }
 
+
 def convert_certificate_to_pem(public_key):
     cert_str = public_key.encode()
     cert_obj = load_pem_x509_certificate(cert_str, default_backend())
     pub_key = cert_obj.public_key()
     return pub_key
+
 
 def format_public_key(public_key):
     public_key = public_key.replace('\n', ' ').replace('\r', '')

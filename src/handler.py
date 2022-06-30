@@ -10,12 +10,9 @@ from src.authorizer import calendar_blocks_user_commands
 TODO:
 
 1. This code needs a lot of cleanup. 
-
     - specifically: document and adhere to data format conventions.
         eg. Inputs and Outputs for the api and ws endpoints.
-
     - refactor functions into logical files
-
 2. Async send to all websocket clients. 
 
 """
@@ -27,9 +24,10 @@ dynamodb = boto3.resource('dynamodb')
 
 
 def streamHandler(event, context):
+    """Handles the job request data stream."""
+
     table = dynamodb.Table(os.environ['DYNAMODB_JOBS'])
     print(json.dumps(event))
-    #data = event['Records'][0]['dynamodb']['NewImage']
     records = event.get('Records', [])
 
     for item in records:
@@ -46,57 +44,66 @@ def streamHandler(event, context):
         # If the response object doesn't have the key 'Item', there is nothing
         # to return, so close the function.
         # Note: using context.succeed() prevents the dynamodb stream from 
-        # continuously retrying a bad event (eg. an event that doesn't exist)
+        # continuously retrying a bad event (eg. an event that doesn't exist).
         if response.get('Item', 'not here') == 'not here': context.succeed()
 
         print(json.dumps(response, indent=2, cls=DecimalEncoder))
-        #_send_to_all_connections(data)
-        #_send_to_all_connections(response.get('Item', []))
         send_to_datastream(site, response.get('Item', []))
 
     return get_response(HTTPStatus.OK, "stream has activated this function")
+
 
 #=========================================#
 #=======       API Endpoints      ========#
 #=========================================#
 
 def newJob(event, context):
-    ''' Requests a new job for an observatory to complete, typically from the UI,
-    and adds the job to dynamoDB table for the observatory to complete.
-
-    Args: JSON request body including
-        "site" (str): sitecode of job (e.g. "wmd"),
-        "user_name" (str): user requesting job (e.g. "Tim Beccue"),
-        "user_id" (str): auth0 id of user (e.g. "google-oauth2|112301903840371673242"),
-        "user_roles" (list): list of user's auth0 roles (e.g. ['admin']),
-        "device" (str): device type (e.g. "camera"),
-        "instance" (str): specific device (e.g. "camera1"),
-        "action" (str): action to be completed (e.g. "stop"),
-        "optional_params" (dict): optional parameters for the instrument (e.g. {bin: 1, count: 3, filter: 'R'}),
-        "required_params" (dict): required parameters for the instrument (e.g. {time: 60, image_type: 'light'}),
+    """Requests a new job for an observatory and adds it to the jobs table.
     
-    Returns: JSON body of table entry including 
-        "site" (str): same as above,
-        "ulid" (str): unique ID of job based on the timestamp (e.g. "01G..."), 
-        "statusId" (str): ulid prefaced by the status of the job (e.g. "UNREAD#01G..."), 
-        "user_name" (str): same as above,
-        "user_id" (str): same as above,       
-        "user_roles" (list): same as above, if 'user_roles' in params, else [],
-        "timestamp_ms" (int): timestamp of job in ms,
-        "deviceType" (str): same as "device" above,
-        "deviceInstance" (str): same as "instance" above,
-        "action" (str): same as above,
-        "optional_params" (dict): same as above,
-        "required_params" (dict): same as above,
-    '''
+    Requests a new job for an observatory to complete, typically from the UI,
+    and adds the job to DynamoDB table for the observatory to complete.
+
+    Args:
+        JSON request body including:
+            site (str): Sitecode of job (e.g. "saf").
+            user_name (str): User requesting job (e.g. "Tim Beccue").
+            user_id (str):
+                Auth0 id of user (e.g. "google-oauth2|112301903840371673242").
+            user_roles (list): List of user's auth0 roles (e.g. ['admin']).
+            device (str): Device type (e.g. "camera").
+            instance (str): Specific device (e.g. "camera1").
+            action (str): Action to be completed (e.g. "stop").
+            optional_params (dict):
+                Optional parameters for the instrument
+                (e.g. {bin: 1, count: 3, filter: 'R'}).
+            required_params (dict): 
+                Required parameters for the instrument
+                (e.g. {time: 60, image_type: 'light'}).
+    
+    Returns:
+        JSON body of table entry including:
+            site (str): Same as above.
+            ulid (str): Unique ID of job based on timestamp (e.g. "01G...").
+            statusId (str): 
+                ulid prefaced by the status of the job (e.g. "UNREAD#01G...").
+            user_name (str): Same as above.
+            user_id (str): Same as above.
+            user_roles (list): Same as above if 'user_roles' in params, else [].
+            timestamp_ms (int): Timestamp of job in ms.
+            deviceType (str): Same as "device" above.
+            deviceInstance (str): Same as "instance" above.
+            action (str): Same as above.
+            optional_params (dict): Same as above.
+            required_params (dict): Same as above.
+    """
 
     params = json.loads(event.get("body", ""))
     table = dynamodb.Table(os.environ['DYNAMODB_JOBS'])
 
-    print("params:",params) # for debugging
+    print("params:", params)  # for debugging
 
-    # unique, lexicographically sortable ID based on server timestamp
-    # see: https://github.com/ulid/spec
+    # Unique, lexicographically sortable ID based on server timestamp.
+    # See: https://github.com/ulid/spec
     ulid_obj = ulid.new()
     job_id = ulid_obj.str
     timestamp_ms = ulid_obj.timestamp().int
@@ -138,31 +145,36 @@ def newJob(event, context):
     }
     table_response = table.put_item(Item=dynamodb_entry)
 
-    # return the dynamodb entry and the response from the table entry. 
+    # Return the dynamodb entry and the response from the table entry. 
     return_obj = {
         **dynamodb_entry,
         "table_response": table_response,
     }
     return get_response(HTTPStatus.OK, json.dumps(return_obj, indent=4, cls=DecimalEncoder))
 
-def updateJobStatus(event, context):
-    '''Updates the status of a job.
-    
-    Args: JSON request body including
-        "newStatus" (str): new job status (e.g. "COMPLETED", "RECEIVED"), 
-        "site" (str): sitecode of job (e.g. "wmd"), 
-        "ulid" (str): unique ID of job, (e.g. "01DZVYANEHR30TTKPK4XZD6MSB"),
-        "secondsUntilComplete" (int): estimate of the remaining time until a future status 
-        update of "complete" is sent, with -1 as default (e.g. 15)
-    
-    Returns: JSON body as formatted above with updated job status, ulid, and 
-    secondsUntilComplete.
 
-    '''
+def updateJobStatus(event, context):
+    """Updates the status of a job.
+    
+    Args:
+        JSON request body including:
+            newStatus (str): New job status (e.g. "COMPLETED", "RECEIVED").
+            site (str): Sitecode of job (e.g. "saf").
+            ulid (str): Unique ID of job (e.g. "01DZVYANEHR30TTKPK4XZD6MSB").
+            secondsUntilComplete (int):
+                Estimate of the remaining time until a future status.
+                Update of "complete" is sent, with -1 as default (e.g. 15).
+    
+    Returns:
+        OK status code with JSON body as formatted above with updated
+        job status, ulid, and secondsUntilComplete.
+        Otherwise, bad request status code if missing site and jobId.
+    """
+    
     params = json.loads(event.get("body", ""))
     table = dynamodb.Table(os.environ['DYNAMODB_JOBS'])
 
-    print('params:',params) # for debugging
+    print('params:', params)  # for debugging
 
     # TODO: add a check to see if the status update is a valid state change.
 
@@ -186,18 +198,23 @@ def updateJobStatus(event, context):
             ':eta': secondsUntilComplete
         }
     )
-    print('update status response: ',response)
+    print('update status response: ', response)
     return get_response(HTTPStatus.OK, json.dumps(response, indent=4, cls=DecimalEncoder))
 
-def getNewJobs(event, context):
-    '''Get list of jobs with "UNREAD" status, change status to "RECEIVED". 
-    Intended for observatory code.
-    
-    Args: JSON request body including
-        "site" (str): site to retrieve job list from (e.g. "wmd")
 
-    Returns: List of updated job objects (JSON)
-    '''
+def getNewJobs(event, context):
+    """Gets list of jobs with 'UNREAD' status, changes status to 'RECEIVED'.
+    
+    Intended for use with the observatory code.
+    
+    Args:
+        JSON request body including:
+            site (str): site to retrieve job list from (e.g. "saf").
+
+    Returns:
+        List of updated job objects (JSON).
+    """
+
     params = json.loads(event.get("body", ""))
     table = dynamodb.Table(os.environ['DYNAMODB_JOBS'])
 
@@ -227,15 +244,19 @@ def getNewJobs(event, context):
 
     return get_response(HTTPStatus.OK, json.dumps(table_response['Items'], indent=4, cls=DecimalEncoder))
 
+
 def getRecentJobs(event, context):
-    ''' Returns a list of jobs that are no older than the provided length of time.
+    """Returns list of jobs that are no older than the provided length of time.
 
-    Args: JSON request body including
-        "site" (str): site to retrieve job list from (e.g. "wmd"), 
-        "timeRange" (int): maximum age of jobs returned in milliseconds, 
+    Args:
+        JSON request body including:
+            site (str): Site to retrieve job list from (e.g. "saf").
+            timeRange (int): Maximum age of jobs returned in milliseconds.
 
-    Returns: List of job objects (JSON) younger than maximum age
-    '''
+    Returns:
+        List of job objects (JSON) younger than maximum age.
+    """
+
     params = json.loads(event.get("body", ""))
     table = dynamodb.Table(os.environ['DYNAMODB_JOBS'])
     site = params['site']
@@ -253,19 +274,30 @@ def getRecentJobs(event, context):
     )
     return get_response(HTTPStatus.OK, json.dumps(table_response['Items'], indent=4, cls=DecimalEncoder))
 
+
 def startJob(event, context):
-    ''' Example body:
+    """Begins a job request from the jobs DnyamoDB table.
+
+    Args:
+        site (str): Site to perform job at (e.g. "saf").
+        jobId (str): Unique id of the job to be performed.
+
+    Returns:
+        OK status code with updated job request table if successful.
+        Bad request status code if missing site and jobId in request payload. 
+
+    Example request body:
     { 
-        "site": "wmd, 
+        "site": "saf", 
         "ulid": "01DZVXKEV8YKCFJBM5HV0YA0WE", 
         "secondsUntilComplete": "60"
     }
-    '''
+    """
 
     params = json.loads(event.get("body", ""))
     table = dynamodb.Table(os.environ['DYNAMODB_JOBS'])
 
-    print('params:',params) # for debugging
+    print('params:', params)  # for debugging
 
     try:
         site = params['site']
@@ -289,3 +321,4 @@ def startJob(event, context):
     )
 
     return get_response(HTTPStatus.OK, json.dumps(response, indent=4, cls=DecimalEncoder))
+

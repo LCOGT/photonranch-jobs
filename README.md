@@ -59,7 +59,7 @@ Instructions to manually run tests will be detailed here.
 
 ## Job Syntax
 
-Jobs are stored as entries in a dynamodb table. They can be thought of as json objects. Here is an example: 
+Jobs are stored as entries in a DynamoDB table. They can be thought of as JSON objects. Here is an example: 
 
 ```json
 {
@@ -79,7 +79,7 @@ Jobs are stored as entries in a dynamodb table. They can be thought of as json o
     "time": "1"
   },
   "secondsUntilComplete": "60",
-  "site": "wmd",
+  "site": "saf",
   "statusId": "RECEIVED#01DZVY846T52P6P3JWAJNJMJ1Z",
   "timestamp_ms": 1580411916506,
   "ulid": "01DZVY846T52P6P3JWAJNJMJ1Z",
@@ -102,12 +102,12 @@ The keys are described as follows:
 
 ## Endpoints
 
-All of the following endpoints use the base url `https://jobs.photonranch.org/jobs`
+All of the following endpoints use the base URL `https://jobs.photonranch.org/jobs`.
 
 - POST `/newjob`
     - Description: Request a new job for an observatory to complete, typically from the UI. 
-    - Authorization required: yes (header must contain Bearer access token from Auth0)
-    - Query Params: none 
+    - Authorization required: Yes (header must contain Bearer access token from Auth0).
+    - Query Params: None.
     - Request body: 
         - "site" | string | site abbreviation
         - "device" | string | type of device 
@@ -118,30 +118,30 @@ All of the following endpoints use the base url `https://jobs.photonranch.org/jo
         - "user_name" | string | the readable username, used for display
         - "user_id" | string | unique id for the user
     - Responses: 
-        - 200: returns a copy of the job that was added to the jobs database
-        - 400: missing required key in body
-        - 401: unauthorized user (either not logged in or did not reserve time) 
+        - 200: Returns a copy of the job that was added to the jobs database.
+        - 400: Missing required key in body.
+        - 401: Unauthorized user (either not logged in or did not reserve time).
 
 - POST `/updatejobstatus`
     - Description: Update the status of a job, mainly used by observatory code. 
     This status is typically displayed in the UI for the user to see what is currently happening. 
-    - Authorization required: no (will be added later)
-    - Query Params: none
+    - Authorization required: No (will be added later).
+    - Query Params: None.
     - Request body: 
         - "site" | string | site abbreviation
         - "ulid" | string | id of the job being updated
         - "newStatus" | string | new status, for example: "STARTED", "EXPOSING", "COMPLETE".
         - "secondsUntilComplete" | int | estimate of the remaining time until a future status update of "complete" is sent. An empty value will register as -1. If no time estimate is available, use value of -1.
     - Responses: 
-        - 400: missing required parameter (site and job ulid) 
-        - 200: returns a JSON body with updated ulid, statusID, and secondsUntilComplete
+        - 400: Missing required parameter (site and job ulid). 
+        - 200: Returns a JSON body with updated ulid, statusID, and secondsUntilComplete.
     - Example request:
     ```python
-    # python 3.6
+    # python 3.7
     import requests, json
     url = "https://jobs.photonranch.org/jobs/updatejobstatus"
     payload = json.dumps({
-        "site": "wmd",
+        "site": "saf",
         "ulid": "01E4C33S9ZFGS8P0K31FH9FDTN",
         "newStatus": "STARTED",
         "secondsUntilComplete": 5
@@ -169,7 +169,7 @@ All of the following endpoints use the base url `https://jobs.photonranch.org/jo
         }
     }
     ```
-    - The job in dynamodb has been updated to look like:
+    - The job in DynamoDB has been updated to look like:
     ```json
     [
         {
@@ -183,7 +183,7 @@ All of the following endpoints use the base url `https://jobs.photonranch.org/jo
             "timestamp_ms": 1585248855359,
             "deviceInstance": "focuser1",
             "secondsUntilComplete": 5,
-            "site": "wmd",
+            "site": "saf",
             "optional_params": {},
             "user_name": "Firstname Lastname",
             "user_id": "user-id-1234"
@@ -192,18 +192,18 @@ All of the following endpoints use the base url `https://jobs.photonranch.org/jo
     ```
   
 - POST `/getnewjobs`
-    - Description: get a list of jobs with status "UNREAD". These jobs are immediately updated with a status of "RECEIVED". 
-    - Authorization required: no (will be added later)
+    - Description: Get a list of jobs with status "UNREAD". These jobs are immediately updated with a status of "RECEIVED". 
+    - Authorization required: No (will be added later).
     - Request body: 
         - "site" | string | site abbreviation
     - Responses: 
         - 200: List of updated job objects (JSON). See 'Job Syntax' above for an example.
     - Example request: 
     ```python
-    # python 3.6
+    # python 3.7
     import requests, json
     url = "https://jobs.photonranch.org/jobs/getnewjobs"
-    payload = json.dumps({"site": "wmd"})
+    payload = json.dumps({"site": "saf"})
     response = requests.request("POST", url, data=payload)
     print(response.json())
     ```
@@ -220,7 +220,7 @@ All of the following endpoints use the base url `https://jobs.photonranch.org/jo
             "ulid": "01E4C33S9ZFGS8P0K31FH9FDTN",
             "timestamp_ms": 1585248855359,
             "deviceInstance": "focuser1",
-            "site": "wmd",
+            "site": "saf",
             "optional_params": {},
             "user_name": "Firstname Lastname",
             "user_id": "user-id-1234"
@@ -233,7 +233,7 @@ All of the following endpoints use the base url `https://jobs.photonranch.org/jo
             "ulid": "01E4C34DEK5H1CMJEPJ2N5AX02",
             "timestamp_ms": 1585248875987,
             "deviceInstance": "camera1",
-            "site": "wmd",
+            "site": "saf",
             "optional_params": {},
             "user_name": "Firstname Lastname",
             "user_id": "user-id-1234"
@@ -242,8 +242,8 @@ All of the following endpoints use the base url `https://jobs.photonranch.org/jo
     ```
 
 - POST `/getrecentjobs`
-    - Description: return a list of jobs that are no older than the provided length of time.
-    - Authorization required: no (will be added later)
+    - Description: Return a list of jobs that are no older than the provided length of time.
+    - Authorization required: No (will be added later).
     - Request body: 
         - "site" | string | site abbreviation
         - "timeRange" | int | maximum age of jobs returned, *in milliseconds*
@@ -252,11 +252,11 @@ All of the following endpoints use the base url `https://jobs.photonranch.org/jo
         above for an example.
     - Example request: 
     ```python
-    # python 3.6
+    # python 3.7
     import requests, json
     url = "https://jobs.photonranch.org/jobs/getrecentjobs"
     payload = json.dumps({
-        "site": "wmd", 
+        "site": "saf", 
         "timeRange": 1000 * 60 * 60 * 24, # get anything less than a day old (using milliseconds)
     })
     response = requests.request("POST", url, data=payload)
@@ -275,7 +275,7 @@ All of the following endpoints use the base url `https://jobs.photonranch.org/jo
             "ulid": "01E4C33S9ZFGS8P0K31FH9FDTN",
             "timestamp_ms": 1585248855359,
             "deviceInstance": "focuser1",
-            "site": "wmd",
+            "site": "saf",
             "optional_params": {},
             "user_name": "Firstname Lastname",
             "user_id": "user-id-1234"
