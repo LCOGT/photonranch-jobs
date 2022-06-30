@@ -119,7 +119,8 @@ All of the following endpoints use the base url `https://jobs.photonranch.org/jo
         - 401: unauthorized user (either not logged in or did not reserve time) 
 
 - POST `/updatejobstatus`
-    - Description: Update the status of a job. This status is typically displayed in the UI for the user to see what is currently happening. 
+    - Description: Update the status of a job, mainly used by observatory code. 
+    This status is typically displayed in the UI for the user to see what is currently happening. 
     - Authorization required: no (will be added later)
     - Query Params: none
     - Request body: 
@@ -127,7 +128,9 @@ All of the following endpoints use the base url `https://jobs.photonranch.org/jo
         - "ulid" | string | id of the job being updated
         - "newStatus" | string | new status, for example: "STARTED", "EXPOSING", "COMPLETE".
         - "secondsUntilComplete" | int | estimate of the remaining time until a future status update of "complete" is sent. An empty value will register as -1. If no time estimate is available, use value of -1.
-    - Responses: 200 if successful
+    - Responses: 
+        - 400: missing required parameter (site and job ulid) 
+        - 200: returns a JSON body with updated ulid, statusID, and secondsUntilComplete
     - Example request:
     ```python
     # python 3.6
@@ -142,9 +145,7 @@ All of the following endpoints use the base url `https://jobs.photonranch.org/jo
     response = requests.request("POST", url, data=payload)
     print(response.json())
     ```
-
     - Example response:
-
     ```python
     {
         'ResponseMetadata': {
@@ -165,7 +166,6 @@ All of the following endpoints use the base url `https://jobs.photonranch.org/jo
     }
     ```
     - The job in dynamodb has been updated to look like:
-
     ```json
     [
         {
@@ -190,10 +190,10 @@ All of the following endpoints use the base url `https://jobs.photonranch.org/jo
 - POST `/getnewjobs`
     - Description: get a list of jobs with status "UNREAD". These jobs are immediately updated with a status of "RECEIVED". 
     - Authorization required: no (will be added later)
-    - Query Params: none
     - Request body: 
         - "site" | string | site abbreviation
-    - Responses: List of job objects (json). See 'Job Syntax' above for an example.
+    - Responses: 
+        - 200: List of updated job objects (JSON). See 'Job Syntax' above for an example.
     - Example request: 
     ```python
     # python 3.6
@@ -240,11 +240,12 @@ All of the following endpoints use the base url `https://jobs.photonranch.org/jo
 - POST `/getrecentjobs`
     - Description: return a list of jobs that are no older than the provided length of time.
     - Authorization required: no (will be added later)
-    - Query Params: none
     - Request body: 
         - "site" | string | site abbreviation
         - "timeRange" | int | maximum age of jobs returned, *in milliseconds*
-    - Responses: List of job objects (json). See 'Job Syntax' above for an example.
+    - Responses: 
+        - 200: List of job objects (JSON) younger than maximum age. See 'Job Syntax' 
+        above for an example.
     - Example request: 
     ```python
     # python 3.6
@@ -278,11 +279,4 @@ All of the following endpoints use the base url `https://jobs.photonranch.org/jo
     ]
     ```
 
-    - POST `/startjob`
-    - Description: 
-    - Authorization required: No
-    - Path Params:
-    - Query Params:
-    - Request body: 
-    - Responses: 
-    - Example request: 
+## License

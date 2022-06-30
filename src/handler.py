@@ -146,13 +146,18 @@ def newJob(event, context):
     return get_response(HTTPStatus.OK, json.dumps(return_obj, indent=4, cls=DecimalEncoder))
 
 def updateJobStatus(event, context):
-    ''' Example request body: 
-    { 
-        "newStatus": "ACTIVE", 
-        "site": "wmd", 
-        "ulid": "01DZVYANEHR30TTKPK4XZD6MSB"
-        "secondsUntilComplete": 15,
-    }
+    '''Updates the status of a job.
+    
+    Args: JSON request body including
+        "newStatus" (str): new job status (e.g. "COMPLETED", "RECEIVED"), 
+        "site" (str): sitecode of job (e.g. "wmd"), 
+        "ulid" (str): unique ID of job, (e.g. "01DZVYANEHR30TTKPK4XZD6MSB"),
+        "secondsUntilComplete" (int): estimate of the remaining time until a future status 
+        update of "complete" is sent, with -1 as default (e.g. 15)
+    
+    Returns: JSON body as formatted above with updated job status, ulid, and 
+    secondsUntilComplete.
+
     '''
     params = json.loads(event.get("body", ""))
     table = dynamodb.Table(os.environ['DYNAMODB_JOBS'])
@@ -164,25 +169,34 @@ def updateJobStatus(event, context):
     # Time estimate for task that is starting. Empty value gets default of -1.
     secondsUntilComplete = params.get('secondsUntilComplete', -1)
 
+    try:
+        site = params['site']
+        jobId = params['ulid']
+    except Exception as e:
+        return get_response(HTTPStatus.BAD_REQUEST, "Requires 'site' and 'jobId' in the body payload.")
+
     response = table.update_item(
         Key={
-            'site': params['site'],
-            'ulid': params['ulid'],
+            'site': site,
+            'ulid': jobId,
         },
-        UpdateExpression="set statusId = :sid, secondsUntilComplete = :suc",
+        UpdateExpression="set statusId = :statId, secondsUntilComplete = :eta ",
         ExpressionAttributeValues={
-            ':sid': f"{params['newStatus']}#{params['ulid']}",
-            ':suc': secondsUntilComplete
+            ':statId': f"{params['newStatus']}#{params['ulid']}",
+            ':eta': secondsUntilComplete
         }
     )
     print('update status response: ',response)
     return get_response(HTTPStatus.OK, json.dumps(response, indent=4, cls=DecimalEncoder))
 
 def getNewJobs(event, context):
-    ''' Example request body: 
-    {
-        "site": "wmd"
-    }
+    '''Get list of jobs with "UNREAD" status, change status to "RECEIVED". 
+    Intended for observatory code.
+    
+    Args: JSON request body including
+        "site" (str): site to retrieve job list from (e.g. "wmd")
+
+    Returns: List of updated job objects (JSON)
     '''
     params = json.loads(event.get("body", ""))
     table = dynamodb.Table(os.environ['DYNAMODB_JOBS'])
@@ -214,11 +228,13 @@ def getNewJobs(event, context):
     return get_response(HTTPStatus.OK, json.dumps(table_response['Items'], indent=4, cls=DecimalEncoder))
 
 def getRecentJobs(event, context):
-    ''' Example body:
-    { 
-        "site": "wmd, 
-        "timeRange": "<number of milliseconds>", 
-    }
+    ''' Returns a list of jobs that are no older than the provided length of time.
+
+    Args: JSON request body including
+        "site" (str): site to retrieve job list from (e.g. "wmd"), 
+        "timeRange" (int): maximum age of jobs returned in milliseconds, 
+
+    Returns: List of job objects (JSON) younger than maximum age
     '''
     params = json.loads(event.get("body", ""))
     table = dynamodb.Table(os.environ['DYNAMODB_JOBS'])
