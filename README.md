@@ -10,14 +10,6 @@ which observatories can then carry out.
 Observatories can retrieve new jobs to perform, update a job's status as it changes, and retrieve recent jobs regardless of status. Use of these API endpoints is mostly found in 
 [the observatory repository](https://github.com/LCOGT/ptr-observatory).
 
-## Architecture
-
-An architecture diagram, when created, will go here.
-
-## Dependencies
-
-Dependencies will be listed here.
-
 ## Local Development
 
 Clone the repository to your local machine:
@@ -55,7 +47,7 @@ serverless deploy --stage {stage}
 
 ### Testing
 
-Instructions to manually run tests will be detailed here.
+Tests are written with pytest, but currently have minimal code coverage. Full tests are planned to be added soon.
 
 ## Job Syntax
 
