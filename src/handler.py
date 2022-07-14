@@ -5,6 +5,7 @@ from http import HTTPStatus
 
 from src.helpers import *
 from src.authorizer import calendar_blocks_user_commands
+from src.dynamodb import get_all_site_jobs, remove_jobs
 
 """
 TODO:
@@ -16,18 +17,16 @@ TODO:
 
     - refactor functions into logical files
 
-2. Async send to all websocket clients. 
-
 """
 
 
 logger = logging.getLogger("handler_logger")
 logger.setLevel(logging.DEBUG)
 dynamodb = boto3.resource('dynamodb')
+table = dynamodb.Table(os.environ['DYNAMODB_JOBS'])
 
 
 def streamHandler(event, context):
-    table = dynamodb.Table(os.environ['DYNAMODB_JOBS'])
     print(json.dumps(event))
     #data = event['Records'][0]['dynamodb']['NewImage']
     records = event.get('Records', [])
@@ -71,13 +70,9 @@ def newJob(event, context):
         "user_id": "userid--123124235029350",
         "required_params":{},
         "optional_params":{},
-        "user_name": "Tim Beccue",
-        "user_id": google-oauth2|1231230923412910",
-        "user_roles": ['admin']
     }
     '''
     params = json.loads(event.get("body", ""))
-    table = dynamodb.Table(os.environ['DYNAMODB_JOBS'])
 
     print("params:",params) # for debugging
 
@@ -86,6 +81,10 @@ def newJob(event, context):
     ulid_obj = ulid.new()
     job_id = ulid_obj.str
     timestamp_ms = ulid_obj.timestamp().int
+
+    # Get the user's roles from the authorizer function
+    user_roles = event["requestContext"]["authorizer"]["userRoles"]
+    user_is_admin = 'admin' in user_roles
 
     # Check that all required keys are present.
     # TODO: validation with something like cerberus
@@ -99,28 +98,35 @@ def newJob(event, context):
             return get_response(HTTPStatus.BAD_REQUEST, error)
 
     # Stop commands that are requested during someone else's reservation.
+    # Admins are ok
     user_id = params['user_id']
     site = params['site']
-    if calendar_blocks_user_commands(user_id, site):
+    if calendar_blocks_user_commands(user_id, site) and not user_is_admin:
         print("Disabling commands because another user has a reservation now.")
         error = ("Someone else has a reservation right now. "
                  "Please see the calendar for details.")
         return get_response(HTTPStatus.UNAUTHORIZED, error)
 
+    # Remove all prior commands if a cancel command is issued
+    if params['action'] == 'cancel_all_commands':
+        site_jobs = get_all_site_jobs(params['site'], job_id)
+        remove_jobs(site_jobs)
+
     # Build the jobs description and send it to dynamodb
     dynamodb_entry = {
-        "site": f"{params['site']}",        # PK, GSI1 pk
-        "ulid": job_id,                     # SK
-        "statusId": f"UNREAD#{job_id}",     # GSI1 sk
+        "site": f"{params['site']}",            # PK, GSI1 pk
+        "ulid": job_id,                         # SK
+        "statusId": f"UNREAD#{job_id}",         # GSI1 sk
+        "replicaStatusId": f"UNREAD#{job_id}",  # GSI2 sk
         "user_name": params['user_name'],
         "user_id": params['user_id'],
-        "user_roles": params['user_roles'] if 'user_roles' in params else [],
+        "user_roles": user_roles,
         "timestamp_ms": timestamp_ms,
         "deviceType": f"{params['device']}",
         "deviceInstance": f"{params['instance']}",
         "action": f"{params['action']}",
-        "optional_params": params['optional_params'],
-        "required_params": params['required_params'],
+        "optional_params": params.get('optional_params', {}),
+        "required_params": params.get('required_params', {}),
     }
     table_response = table.put_item(Item=dynamodb_entry)
 
@@ -138,10 +144,14 @@ def updateJobStatus(event, context):
         "site": "wmd", 
         "ulid": "01DZVYANEHR30TTKPK4XZD6MSB"
         "secondsUntilComplete": 15,
+        "alternateQueue": true # optional, default == false
     }
     '''
     params = json.loads(event.get("body", ""))
-    table = dynamodb.Table(os.environ['DYNAMODB_JOBS'])
+
+    use_alternate_queue = params.get('alternateQueue', False)
+    status_key = "replicaStatusId" if use_alternate_queue else "statusId"
+    index = secondary_index_name(event)
 
     print('params:',params) # for debugging
 
@@ -167,21 +177,24 @@ def updateJobStatus(event, context):
 def getNewJobs(event, context):
     ''' Example request body: 
     {
-        "site": "wmd"
+        "site": "wmd",
+        "alternateQueue": true # optional, default == false
     }
     '''
     params = json.loads(event.get("body", ""))
-    table = dynamodb.Table(os.environ['DYNAMODB_JOBS'])
 
     print('params: ',params) # for debugging
 
     site = params['site']
+    use_alternate_queue = params.get('alternateQueue', False)
+    status_key = "replicaStatusId" if use_alternate_queue else "statusId"
+    index = secondary_index_name(event)
 
     # Query for unread items    
     table_response = table.query(
-        IndexName="StatusId",
+        IndexName=index,
         KeyConditionExpression=Key('site').eq(site) 
-            & Key('statusId').begins_with("UNREAD")
+            & Key(status_key).begins_with("UNREAD")
     )
 
     # Update the status to 'RECEIVED' for all items returned.
@@ -191,7 +204,7 @@ def getNewJobs(event, context):
                 'site': job['site'], 
                 'ulid': job['ulid'] 
             },
-            UpdateExpression="set statusId = :s",
+            UpdateExpression=f"set {status_key} = :s",
             ExpressionAttributeValues={
                 ':s': f"RECEIVED#{job['ulid']}"
             }
@@ -207,7 +220,6 @@ def getRecentJobs(event, context):
     }
     '''
     params = json.loads(event.get("body", ""))
-    table = dynamodb.Table(os.environ['DYNAMODB_JOBS'])
     site = params['site']
 
     aDay = 24*3600*1000 # ms in a day (default value)
@@ -228,18 +240,21 @@ def startJob(event, context):
     { 
         "site": "wmd, 
         "ulid": "01DZVXKEV8YKCFJBM5HV0YA0WE", 
-        "secondsUntilComplete": "60"
+        "secondsUntilComplete": "60",
+        "alternateQueue": true # optional, default == false
     }
     '''
 
     params = json.loads(event.get("body", ""))
-    table = dynamodb.Table(os.environ['DYNAMODB_JOBS'])
 
     print('params:',params) # for debugging
 
     try:
         site = params['site']
         jobId = params['ulid']
+        use_alternate_queue = params.get('alternateQueue', False)
+        status_key = "replicaStatusId" if use_alternate_queue else "statusId"
+        index = secondary_index_name(event)
     except Exception as e:
         return get_response(HTTPStatus.BAD_REQUEST, "Requires 'site' and 'jobId' in the body payload.")
 
@@ -251,7 +266,7 @@ def startJob(event, context):
             'site': site,
             'ulid': jobId,
         },
-        UpdateExpression="set statusId = :statId, secondsUntilComplete = :eta ",
+        UpdateExpression=f"set {status_key} = :statId, secondsUntilComplete = :eta ",
         ExpressionAttributeValues={
             ':statId': f"STARTED#{jobId}",
             ':eta': secondsUntilComplete

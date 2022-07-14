@@ -18,7 +18,8 @@ custom:
   # This is the 'variable' for the customDomain.basePath value, based on the stage.
   # Run as `sls deploy --stage <stage_name>`
   stage:
-    dev: jobs
+    prod: jobs
+    dev: dev
     test: test 
 
   # Since lambda runs on a linux instance, we need to zip the requirements in a linux docker container.
@@ -61,6 +62,7 @@ provider:
         - dynamodb:GetRecords
         - dynamodb:GetShardIterator
         - dynamodb:ListStreams
+        - dynamodb:BatchWriteItem
       Resource:
         #- "arn:aws:dynamodb:${self:provider.region}:*:table/${self:custom.jobsTable}*"
         #- "arn:aws:dynamodb:${self:provider.region}:*:table/${self:custom.jobsConnectionsTable}*"
@@ -129,6 +131,8 @@ resources:
             AttributeType: S
           - AttributeName: statusId
             AttributeType: S
+          - AttributeName: replicaStatusId # second independent queue for site to poll
+            AttributeType: S
         KeySchema:
           - AttributeName: site 
             KeyType: HASH
@@ -140,6 +144,17 @@ resources:
               - AttributeName: site
                 KeyType: HASH
               - AttributeName: statusId 
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+            ProvisionedThroughput:
+              ReadCapacityUnits: 1
+              WriteCapacityUnits: 1
+          - IndexName: ReplicaReadStatus
+            KeySchema:
+              - AttributeName: site
+                KeyType: HASH
+              - AttributeName: replicaStatusId
                 KeyType: RANGE
             Projection:
               ProjectionType: ALL
@@ -162,17 +177,7 @@ functions:
           authorizer:
             name: authorizerFunc
             resultTtlInSeconds: 0 # Don't cache the policy or other tasks will fail!
-          cors:
-            origin: '*'
-            headers:
-              - Content-Type
-              - X-Amz-Date
-              - Authorization
-              - X-Api-Key
-              - X-Amz-Security-Token
-              - X-Amz-User-Agent
-              - Access-Control-Allow-Origin
-              - Access-Control-Allow-Credentials
+          cors: true
   updateJobStatus:
     handler: src/handler.updateJobStatus
     events:
@@ -182,17 +187,7 @@ functions:
           #authorizer:
             #name: authorizerFunc
             #resultTtlInSeconds: 0 # Don't cache the policy or other tasks will fail!
-          cors:
-            origin: '*'
-            headers:
-              - Content-Type
-              - X-Amz-Date
-              - Authorization
-              - X-Api-Key
-              - X-Amz-Security-Token
-              - X-Amz-User-Agent
-              - Access-Control-Allow-Origin
-              - Access-Control-Allow-Credentials
+          cors: true
   getNewJobs:
     handler: src/handler.getNewJobs
     events:
@@ -202,17 +197,7 @@ functions:
           #authorizer:
             #name: authorizerFunc
             #resultTtlInSeconds: 0 # Don't cache the policy or other tasks will fail!
-          cors:
-            origin: '*'
-            headers:
-              - Content-Type
-              - X-Amz-Date
-              - Authorization
-              - X-Api-Key
-              - X-Amz-Security-Token
-              - X-Amz-User-Agent
-              - Access-Control-Allow-Origin
-              - Access-Control-Allow-Credentials
+          cors: true
   getRecentJobs:
     handler: src/handler.getRecentJobs
     events:
@@ -222,17 +207,7 @@ functions:
           #authorizer:
             #name: authorizerFunc
             #resultTtlInSeconds: 0 # Don't cache the policy or other tasks will fail!
-          cors:
-            origin: '*'
-            headers:
-              - Content-Type
-              - X-Amz-Date
-              - Authorization
-              - X-Api-Key
-              - X-Amz-Security-Token
-              - X-Amz-User-Agent
-              - Access-Control-Allow-Origin
-              - Access-Control-Allow-Credentials
+          cors: true
   startJob:
     handler: src/handler.startJob
     events:
@@ -242,17 +217,7 @@ functions:
           #authorizer:
             #name: authorizerFunc
             #resultTtlInSeconds: 0 # Don't cache the policy or other tasks will fail!
-          cors:
-            origin: '*'
-            headers:
-              - Content-Type
-              - X-Amz-Date
-              - Authorization
-              - X-Api-Key
-              - X-Amz-Security-Token
-              - X-Amz-User-Agent
-              - Access-Control-Allow-Origin
-              - Access-Control-Allow-Credentials
+          cors: true
   authorizerFunc: 
     handler: src/authorizer.auth
 

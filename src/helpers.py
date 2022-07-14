@@ -35,6 +35,15 @@ class DecimalEncoder(json.JSONEncoder):
                 return int(o)
         return super(DecimalEncoder, self).default(o)
 
+# Return the dynamodb index to use based on the request body
+def secondary_index_name(event):
+    params = json.loads(event.get("body"))
+    use_alternate_queue = params.get("alternateQueue", False)
+    if use_alternate_queue:
+        return "ReplicaReadStatus"
+    else:
+        return "StatusId"
+
 
 #=========================================#
 #=======    External API Calls    ========#
