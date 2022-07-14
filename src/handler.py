@@ -7,28 +7,14 @@ from src.helpers import *
 from src.authorizer import calendar_blocks_user_commands
 from src.dynamodb import get_all_site_jobs, remove_jobs
 
-"""
-TODO:
-
-1. This code needs a lot of cleanup. 
-
-    - specifically: document and adhere to data format conventions.
-        eg. Inputs and Outputs for the api and ws endpoints.
-
-    - refactor functions into logical files
-
-"""
-
-
 logger = logging.getLogger("handler_logger")
 logger.setLevel(logging.DEBUG)
 dynamodb = boto3.resource('dynamodb')
 table = dynamodb.Table(os.environ['DYNAMODB_JOBS'])
 
-
 def streamHandler(event, context):
+    """Handles the job request data stream."""
     print(json.dumps(event))
-    #data = event['Records'][0]['dynamodb']['NewImage']
     records = event.get('Records', [])
 
     for item in records:
@@ -45,39 +31,65 @@ def streamHandler(event, context):
         # If the response object doesn't have the key 'Item', there is nothing
         # to return, so close the function.
         # Note: using context.succeed() prevents the dynamodb stream from 
-        # continuously retrying a bad event (eg. an event that doesn't exist)
+        # continuously retrying a bad event (eg. an event that doesn't exist).
         if response.get('Item', 'not here') == 'not here': context.succeed()
 
         print(json.dumps(response, indent=2, cls=DecimalEncoder))
-        #_send_to_all_connections(data)
-        #_send_to_all_connections(response.get('Item', []))
         send_to_datastream(site, response.get('Item', []))
 
     return get_response(HTTPStatus.OK, "stream has activated this function")
+
 
 #=========================================#
 #=======       API Endpoints      ========#
 #=========================================#
 
 def newJob(event, context):
-    ''' Example request body:
-    {
-        "site": "wmd", 
-        "device":"camera",
-        "instance":"camera1",
-        "action":"stop",
-        "user_name": "some-username",
-        "user_id": "userid--123124235029350",
-        "required_params":{},
-        "optional_params":{},
-    }
-    '''
+    """Requests a new job for an observatory and adds it to the jobs table.
+    
+    Requests a new job for an observatory to complete, typically from the UI,
+    and adds the job to DynamoDB table for the observatory to complete.
+
+    Args:
+        JSON request body including:
+            site (str): Sitecode of job (e.g. "saf").
+            user_name (str): User requesting job (e.g. "Tim Beccue").
+            user_id (str):
+                Auth0 id of user (e.g. "google-oauth2|112301903840371673242").
+            user_roles (list): List of user's auth0 roles (e.g. ['admin']).
+            device (str): Device type (e.g. "camera").
+            instance (str): Specific device (e.g. "camera1").
+            action (str): Action to be completed (e.g. "stop").
+            optional_params (dict):
+                Optional parameters for the instrument
+                (e.g. {bin: 1, count: 3, filter: 'R'}).
+            required_params (dict): 
+                Required parameters for the instrument
+                (e.g. {time: 60, image_type: 'light'}).
+    
+    Returns:
+        JSON body of table entry including:
+            site (str): Same as above.
+            ulid (str): Unique ID of job based on timestamp (e.g. "01G...").
+            statusId (str): 
+                ulid prefaced by the status of the job (e.g. "UNREAD#01G...").
+            user_name (str): Same as above.
+            user_id (str): Same as above.
+            user_roles (list): Same as above if 'user_roles' in params, else [].
+            timestamp_ms (int): Timestamp of job in ms.
+            deviceType (str): Same as "device" above.
+            deviceInstance (str): Same as "instance" above.
+            action (str): Same as above.
+            optional_params (dict): Same as above.
+            required_params (dict): Same as above.
+    """
+
     params = json.loads(event.get("body", ""))
 
-    print("params:",params) # for debugging
+    print("params:", params)  # for debugging
 
-    # unique, lexicographically sortable ID based on server timestamp
-    # see: https://github.com/ulid/spec
+    # Unique, lexicographically sortable ID based on server timestamp.
+    # See: https://github.com/ulid/spec
     ulid_obj = ulid.new()
     job_id = ulid_obj.str
     timestamp_ms = ulid_obj.timestamp().int
@@ -93,7 +105,7 @@ def newJob(event, context):
     actual_keys = params.keys()
     for key in required_keys:
         if key not in actual_keys:
-            print(f"Error: missing requied key {key}")
+            print(f"Error: missing required key {key}")
             error = f"Error: missing required key {key}"
             return get_response(HTTPStatus.BAD_REQUEST, error)
 
@@ -130,57 +142,83 @@ def newJob(event, context):
     }
     table_response = table.put_item(Item=dynamodb_entry)
 
-    # return the dynamodb entry and the response from the table entry. 
+    # Return the dynamodb entry and the response from the table entry. 
     return_obj = {
         **dynamodb_entry,
         "table_response": table_response,
     }
     return get_response(HTTPStatus.OK, json.dumps(return_obj, indent=4, cls=DecimalEncoder))
 
+
 def updateJobStatus(event, context):
-    ''' Example request body: 
-    { 
-        "newStatus": "ACTIVE", 
-        "site": "wmd", 
-        "ulid": "01DZVYANEHR30TTKPK4XZD6MSB"
-        "secondsUntilComplete": 15,
-        "alternateQueue": true # optional, default == false
-    }
-    '''
+    """Updates the status of a job.
+    
+    Args:
+        JSON request body including:
+            newStatus (str): New job status (e.g. "COMPLETED", "RECEIVED").
+            site (str): Sitecode of job (e.g. "saf").
+            ulid (str): Unique ID of job (e.g. "01DZVYANEHR30TTKPK4XZD6MSB").
+            secondsUntilComplete (int):
+                Estimate of the remaining time until a future status.
+                Update of "complete" is sent, with -1 as default (e.g. 15).
+            alternateQueue (bool): Whether to update the job status on the 
+                alternate command queue. Default is false. 
+    
+    Returns:
+        OK status code with JSON body as formatted above with updated
+        job status, ulid, and secondsUntilComplete.
+        Otherwise, bad request status code if missing site and jobId.
+    """
     params = json.loads(event.get("body", ""))
 
     use_alternate_queue = params.get('alternateQueue', False)
     status_key = "replicaStatusId" if use_alternate_queue else "statusId"
     index = secondary_index_name(event)
 
-    print('params:',params) # for debugging
+    print('params:', params)  # for debugging
 
     # TODO: add a check to see if the status update is a valid state change.
 
     # Time estimate for task that is starting. Empty value gets default of -1.
     secondsUntilComplete = params.get('secondsUntilComplete', -1)
 
+    try:
+        site = params['site']
+        jobId = params['ulid']
+    except Exception as e:
+        return get_response(HTTPStatus.BAD_REQUEST, "Requires 'site' and 'jobId' in the body payload.")
+
     response = table.update_item(
         Key={
-            'site': params['site'],
-            'ulid': params['ulid'],
+            'site': site,
+            'ulid': jobId,
         },
-        UpdateExpression="set statusId = :sid, secondsUntilComplete = :suc",
+        UpdateExpression="set statusId = :statId, secondsUntilComplete = :eta ",
         ExpressionAttributeValues={
-            ':sid': f"{params['newStatus']}#{params['ulid']}",
-            ':suc': secondsUntilComplete
+            ':statId': f"{params['newStatus']}#{params['ulid']}",
+            ':eta': secondsUntilComplete
         }
     )
-    print('update status response: ',response)
+    print('update status response: ', response)
     return get_response(HTTPStatus.OK, json.dumps(response, indent=4, cls=DecimalEncoder))
 
+
 def getNewJobs(event, context):
-    ''' Example request body: 
-    {
-        "site": "wmd",
-        "alternateQueue": true # optional, default == false
-    }
-    '''
+    """Gets list of jobs with 'UNREAD' status, changes status to 'RECEIVED'.
+    
+    Intended for use with the observatory code.
+    
+    Args:
+        JSON request body including:
+            site (str): site to retrieve job list from (e.g. "saf").
+            alternateQueue (bool): whether to get the job from the alternate
+                command queue. This additional queue provides a way to read 
+                commands without affecting the other queue. Default is false.
+
+    Returns:
+        List of updated job objects (JSON).
+    """
+
     params = json.loads(event.get("body", ""))
 
     print('params: ',params) # for debugging
@@ -212,13 +250,19 @@ def getNewJobs(event, context):
 
     return get_response(HTTPStatus.OK, json.dumps(table_response['Items'], indent=4, cls=DecimalEncoder))
 
+
 def getRecentJobs(event, context):
-    ''' Example body:
-    { 
-        "site": "wmd, 
-        "timeRange": "<number of milliseconds>", 
-    }
-    '''
+    """Returns list of jobs that are no older than the provided length of time.
+
+    Args:
+        JSON request body including:
+            site (str): Site to retrieve job list from (e.g. "saf").
+            timeRange (int): Maximum age of jobs returned in milliseconds.
+
+    Returns:
+        List of job objects (JSON) younger than maximum age.
+    """
+
     params = json.loads(event.get("body", ""))
     site = params['site']
 
@@ -235,19 +279,33 @@ def getRecentJobs(event, context):
     )
     return get_response(HTTPStatus.OK, json.dumps(table_response['Items'], indent=4, cls=DecimalEncoder))
 
+
 def startJob(event, context):
-    ''' Example body:
+    """Begins a job request from the jobs DnyamoDB table.
+
+    Args:
+        site (str): Site to perform job at (e.g. "saf").
+        jobId (str): Unique id of the job to be performed.
+        alternateQueue (bool): whether to get the job from the alternate
+            command queue. This additional queue provides a way to read 
+            commands without affecting the other queue. Default is false.
+
+    Returns:
+        OK status code with updated job request table if successful.
+        Bad request status code if missing site and jobId in request payload. 
+
+    Example request body:
     { 
-        "site": "wmd, 
+        "site": "saf", 
         "ulid": "01DZVXKEV8YKCFJBM5HV0YA0WE", 
         "secondsUntilComplete": "60",
         "alternateQueue": true # optional, default == false
     }
-    '''
+    """
 
     params = json.loads(event.get("body", ""))
 
-    print('params:',params) # for debugging
+    print('params:', params)  # for debugging
 
     try:
         site = params['site']
