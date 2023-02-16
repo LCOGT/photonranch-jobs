@@ -27,14 +27,14 @@ jobs:
     # public_key and secrets.json both used for api auth guards using Auth0
     - name: Create public_key file
       run: |
-        cat > /home/runner/work/photonranch-calendar/photonranch-calendar/public_key << EOF
+        cat > /home/runner/work/photonranch-jobs/photonranch-jobs/public_key << EOF
         -----BEGIN CERTIFICATE-----
         ${{ secrets.AUTH0_PUBLIC_KEY }}
         -----END CERTIFICATE-----
         EOF
     - name: Create Auth0 secrets file
       run: |
-        cat > /home/runner/work/photonranch-calendar/photonranch-calendar/secrets.json << EOF
+        cat > /home/runner/work/photonranch-jobs/photonranch-jobs/secrets.json << EOF
         {
           "AUTH0_CLIENT_ID": "${{ secrets.AUTH0_CLIENT_ID }}"
         }
