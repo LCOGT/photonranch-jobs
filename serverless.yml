@@ -50,6 +50,7 @@ provider:
     DYNAMODB_JOBS: ${self:custom.jobsTable}
     AUTH0_CLIENT_ID: ${file(./secrets.json):AUTH0_CLIENT_ID}
     AUTH0_CLIENT_PUBLIC_KEY: ${file(./public_key)}
+    ACTIVE_STAGE: ${self:provider.stage}
   iam:
     role: 
       statements:

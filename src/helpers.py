@@ -44,6 +44,19 @@ def secondary_index_name(event):
     else:
         return "StatusId"
 
+def get_calendar_url(subdirectory: str) -> str:
+    """ Return the url for the photonranch-calendar api """
+    # Match the calendar environment to the one that is currently running here.
+    # E.g. the dev version of jobs will call the dev version of the calendar
+    active_stage = os.getenv('ACTIVE_STAGE')
+
+    # The url is different for the prod deployment
+    if active_stage == 'prod':
+        active_stage = 'calendar'
+
+    cal_url = f"https://calendar.photonranch.org/{active_stage}/{subdirectory}"
+    return cal_url
+
 
 #=========================================#
 #=======    External API Calls    ========#
@@ -55,8 +68,8 @@ def get_current_reservations(site):
     # Current time in ISO 8601 format
     iso_datestring = datetime.datetime.utcnow() \
             .strftime('%Y-%m-%dT%H:%M:%S.%f')[:-7] + 'Z'
-            
-    url = "https://calendar.photonranch.org/dev/get-event-at-time"
+
+    url = get_calendar_url('get-event-at-time')
     body = json.dumps({
         "site": site,
         "time": iso_datestring,
