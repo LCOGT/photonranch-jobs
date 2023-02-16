@@ -14,9 +14,9 @@ Observatories can retrieve new jobs to perform, update a job's status as it chan
 
 Clone the repository to your local machine:
 
-```
-git clone https://github.com/LCOGT/photonranch-jobs.git
-cd photonranch-jobs
+```bash
+$ git clone https://github.com/LCOGT/photonranch-jobs.git
+$ cd photonranch-jobs
 ```
 
 ### Requirements
@@ -30,24 +30,27 @@ configuring with your own AWS credentials.
 
 ### Deployment
 
-This project currently has two stages, `dev` (currently treated as the production stage) and `test`.
+This project currently has two stages, `prod` and `dev`. Changes to the main or dev branch will automatically deploy
+to the corresponding stage environment. It is recommended that any updates are deployed by this mechanism.
 For manual deployment on your local machine, you'll need to fill out the
 `public_key` and `secrets.json` with the required information, and install packages:
 
-```
-npm install
-serverless plugin install --name serverless-python-requirements
+```bash
+$ npm install -global serverless 
+$ serverless plugin install --name serverless-python-requirements
+$ serverless plugin install --name serverless-dynamodb-pitr
+$ serverless plugin install --name serverless-domain-managerplugin install --name serverless-python-requirements
 ```
 
 To deploy, run:
 
-```
-serverless deploy --stage {stage}
+```bash
+$ serverless deploy --stage {stage}
 ```
 
 ### Testing
 
-Tests are written with pytest, but currently have minimal code coverage. Full tests are planned to be added soon.
+Tests are written with pytest, but currently have minimal code coverage. 
 
 ## Job Syntax
 
@@ -97,7 +100,8 @@ The keys are described as follows:
 
 ## Endpoints
 
-All of the following endpoints use the base URL `https://jobs.photonranch.org/jobs`.
+All of the following endpoints use the base URL `https://jobs.photonranch.org/{stage}` where `{stage}` is either `dev`
+for the dev environment, or `jobs` for the production version.
 
 - POST `/newjob`
   - Description: Request a new job for an observatory to complete, typically from the UI.
@@ -291,5 +295,3 @@ All of the following endpoints use the base URL `https://jobs.photonranch.org/jo
         }
     ]
     ```
-
-## License
