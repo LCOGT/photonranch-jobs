@@ -1,12 +1,11 @@
 {
-  "name": "calendar-backend",
-  "description": "",
-  "version": "0.1.0",
+  "name": "photonranch-jobs",
+  "description": "System that handles real time commands for operating observatory hardware",
+  "version": "1.0.0",
   "dependencies": {
-    "serverless-domain-manager": "^3.3.1",
+    "serverless": "^3.27.0",
+    "serverless-domain-manager": "^6.4.2",
+    "serverless-python-requirements": "^6.0.0",
     "serverless-dynamodb-pitr": "^0.1.1"
-  },
-  "devDependencies": {
-    "serverless-python-requirements": "^5.0.1"
   }
 }

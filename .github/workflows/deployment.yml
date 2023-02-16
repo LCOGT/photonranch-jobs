@@ -1,0 +1,60 @@
+name: Deploy Script
+
+on:
+  push:
+    branches: [main, dev]
+      
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+
+    - uses: actions/checkout@v1
+        
+    - name: Set up Node
+      uses: actions/setup-node@v3
+      with:
+        node-version: 16.x
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: 3.7
+    
+    - name: Install Serverless Framework
+      run: npm install -g serverless
+
+    # public_key and secrets.json both used for api auth guards using Auth0
+    - name: Create public_key file
+      run: |
+        cat > /home/runner/work/photonranch-calendar/photonranch-calendar/public_key << EOF
+        -----BEGIN CERTIFICATE-----
+        ${{ secrets.AUTH0_PUBLIC_KEY }}
+        -----END CERTIFICATE-----
+        EOF
+    - name: Create Auth0 secrets file
+      run: |
+        cat > /home/runner/work/photonranch-calendar/photonranch-calendar/secrets.json << EOF
+        {
+          "AUTH0_CLIENT_ID": "${{ secrets.AUTH0_CLIENT_ID }}"
+        }
+        EOF
+          
+    - name: Install Plugins
+      run: |
+        serverless plugin install --name serverless-python-requirements && \
+        serverless plugin install --name serverless-domain-manager && \
+        serverless plugin install --name serverless-dynamodb-pitr
+
+    # Get the deploy stage from the branch name
+    - name: Set up deployment stage name
+      id: deployment-stage
+      run: |
+        echo "DEPLOY_STAGE=${{ fromJSON('{"main":"prod","dev":"dev"}')[github.ref_name] }}" >> $GITHUB_ENV
+    
+    - name: Serverless Deploy
+      run: serverless deploy --stage $DEPLOY_STAGE
+      env:
+        SERVERLESS_ACCESS_KEY: ${{ secrets.SLS_SECRET_KEY }}
+        AWS_ACCESS_KEY_ID: ${{ secrets.SLS_AWS_ACCESS_KEY_ID }}
+        AWS_SECRET_ACCESS_KEY: ${{ secrets.SLS_AWS_SECRET_ACCESS_KEY }}
